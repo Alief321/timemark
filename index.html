@@ -1,562 +1,500 @@
 <!DOCTYPE html>
-<html lang="id" class="dark">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Timemark BPS Editor & Overlay Studio</title>
-  
-  <!-- Tailwind CSS -->
+  <title>Timemark BPS Editor & Overlay Studio — Glyph Inpainting</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'Roboto', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace']
-          }
-        }
-      }
-    };
-  </script>
-
-  <!-- Google Fonts: Inter & Roboto -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-
-  <!-- Leaflet CSS & JS (Interactive Satellite Map) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
-  <!-- Tesseract.js v5 (Browser OCR) -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      overflow-x: hidden;
-    }
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: rgba(15, 23, 42, 0.2);
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(100, 116, 139, 0.5);
-      border-radius: 9999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(148, 163, 184, 0.8);
-    }
-    /* Checkerboard background for canvas preview area */
+    body { font-family: 'Inter', sans-serif; }
     .canvas-bg {
       background-color: #0f172a;
-      background-image: 
-        linear-gradient(45deg, #1e293b 25%, transparent 25%), 
-        linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
-        linear-gradient(45deg, transparent 75%, #1e293b 75%), 
-        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
-      background-size: 24px 24px;
-      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+      background-image: radial-gradient(#334155 1px, transparent 1px);
+      background-size: 16px 16px;
     }
-    .leaflet-container {
-      font-family: 'Inter', sans-serif;
-      z-index: 10;
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    .tab-active {
+      border-bottom: 2px solid #38bdf8;
+      color: #38bdf8;
+      background-color: rgba(56, 189, 248, 0.08);
     }
-    /* Custom range slider */
-    input[type=range] {
-      accent-color: #3b82f6;
+    #leafletMapContainer {
+      width: 240px;
+      height: 240px;
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      z-index: -1;
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden">
 
-  <!-- Top Navbar -->
-  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
+  <!-- Hidden Leaflet Map for Tile Capture -->
+  <div id="leafletMapContainer"></div>
+
+  <!-- Top Header -->
+  <header class="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0">
     <div class="flex items-center gap-3">
-      <!-- Official BPS Emblem -->
-      <div class="w-9 h-9 rounded-xl bg-white border border-slate-700 flex items-center justify-center p-1 shadow-inner">
-        <img id="navbarBpsLogo" src="https://upload.wikimedia.org/wikipedia/commons/2/28/Lambang_Badan_Pusat_Statistik_%28BPS%29_Indonesia.svg" alt="Logo BPS" class="w-full h-full object-contain" onerror="this.style.display='none'" />
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center font-bold text-slate-950 text-sm shadow">
+        BPS
       </div>
       <div>
-        <div class="flex items-center gap-2">
-          <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">Timemark BPS Studio</h1>
-          <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">OCR In-Place & Geotag</span>
-        </div>
-        <p class="text-xs text-slate-400 hidden sm:block">Edit Teks Langsung di Posisi Asli (OCR) & Stempel Geotag Perjadin BPS</p>
+        <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+          Timemark BPS Editor & Overlay Studio
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">v3 • Glyph Inpainting</span>
+        </h1>
+        <p class="text-[11px] text-slate-400">OCR Edit In-Place Tajam (1+2+4) • Logo BPS Resmi • Sakelar Elemen</p>
       </div>
     </div>
 
-    <!-- Header Quick Actions -->
-    <div class="flex items-center gap-2 flex-wrap">
-      <button id="btnLoadSample" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer">
-        <i data-lucide="image" class="w-3.5 h-3.5 text-amber-400"></i>
-        <span>Foto Contoh</span>
-      </button>
-
-      <label for="photoUploadInput" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-medium border border-blue-500/40 transition cursor-pointer">
-        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+    <div class="flex items-center gap-2">
+      <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+        <i data-lucide="image-plus" class="w-3.5 h-3.5 text-sky-400"></i>
         <span>Upload Foto</span>
-        <input id="photoUploadInput" type="file" accept="image/*" class="hidden" />
+        <input type="file" id="photoInput" accept="image/*" class="hidden" />
       </label>
 
-      <div class="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700">
-        <select id="exportFormat" class="bg-transparent text-xs text-slate-300 px-2 py-1.5 outline-none cursor-pointer">
-          <option value="image/jpeg" class="bg-slate-900">JPG (95%)</option>
-          <option value="image/png" class="bg-slate-900">PNG (Lossless)</option>
-        </select>
-        <button id="btnDownload" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/50 transition cursor-pointer">
-          <i data-lucide="download" class="w-3.5 h-3.5"></i>
-          <span>Unduh Hasil</span>
-        </button>
-      </div>
+      <button id="btnSamplePhoto" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition" title="Muat Foto Simulasi">
+        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+        <span class="hidden sm:inline">Contoh</span>
+      </button>
+
+      <div class="h-5 w-px bg-slate-800 mx-1"></div>
+
+      <select id="exportFormat" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none">
+        <option value="image/jpeg">JPG (96%)</option>
+        <option value="image/png">PNG Lossless</option>
+      </select>
+
+      <button id="btnDownload" class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-lg shadow-sky-500/20 transition">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        <span>Unduh Hasil</span>
+      </button>
     </div>
   </header>
 
-  <!-- Notification Toast Container -->
-  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
-
   <!-- Main Workspace -->
-  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-    
-    <!-- LEFT SIDEBAR: Controls & Tabs -->
-    <aside class="w-full lg:w-[450px] xl:w-[490px] bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col h-auto lg:h-[calc(100vh-65px)]">
-      
-      <!-- Mode Selector Banner (2 Smart Presets) -->
-      <div class="p-3 bg-slate-950/70 border-b border-slate-800 space-y-2">
-        <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
-          <button id="modeBtnEdit" data-mode="edit" class="mode-tab flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200 cursor-pointer">
-            <i data-lucide="scan-text" class="w-3.5 h-3.5 text-amber-400"></i>
-            <span>Mode A: Edit OCR In-Place</span>
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- Left Sidebar Controls -->
+    <aside class="w-96 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+      <!-- Mode Selector -->
+      <div class="p-3 border-b border-slate-800 bg-slate-900/70">
+        <label class="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">Mode Kerja Foto</label>
+        <div class="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <button id="modeInplaceBtn" class="py-1.5 px-2 rounded-md text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center justify-center gap-1">
+            <i data-lucide="scan-text" class="w-3.5 h-3.5"></i>
+            <span>Mode A: Edit OCR</span>
           </button>
-          <button id="modeBtnNew" data-mode="new" class="mode-tab active flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition bg-blue-600 text-white shadow cursor-pointer">
-            <i data-lucide="stamp" class="w-3.5 h-3.5"></i>
+          <button id="modeOverlayBtn" class="py-1.5 px-2 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-1">
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
             <span>Mode B: Stempel Baru</span>
           </button>
         </div>
-        <p id="modeDescBanner" class="text-[11px] text-slate-400 px-1">
-          <strong class="text-blue-400">Mode B Aktif:</strong> Menempelkan template Timemark BPS lengkap ke foto mentah.
+        <p id="modeDescription" class="text-[11px] text-emerald-300/90 mt-1.5 leading-relaxed">
+          <b>Edit OCR In-Place (1+2+4):</b> Menghapus piksel huruf saja (<i>glyph masking</i>) dan mengisi tekstur lokal tanpa nge-blur latar belakang foto asli.
         </p>
       </div>
 
       <!-- Navigation Tabs -->
-      <div class="flex border-b border-slate-800 bg-slate-900/50 px-2 pt-2 gap-1 overflow-x-auto">
-        <button data-tab="tabOcrInPlace" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap cursor-pointer">
-          <i data-lucide="text-cursor-input" class="w-3.5 h-3.5 text-amber-400"></i>
-          <span>OCR In-Place</span>
-        </button>
-        <button data-tab="tabComponents" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap cursor-pointer">
-          <i data-lucide="layers" class="w-3.5 h-3.5 text-emerald-400"></i>
-          <span>Sakelar Elemen</span>
-        </button>
-        <button data-tab="tabGeotag" class="ctrl-tab active flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-blue-500 text-blue-400 bg-slate-800/60 whitespace-nowrap cursor-pointer">
-          <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
-          <span>Teks & Lokasi</span>
-        </button>
-        <button data-tab="tabMap" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap cursor-pointer">
-          <i data-lucide="satellite" class="w-3.5 h-3.5"></i>
-          <span>Mini-Map</span>
-        </button>
-        <button data-tab="tabProfile" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap cursor-pointer">
-          <i data-lucide="user-check" class="w-3.5 h-3.5"></i>
-          <span>Logo & Profil</span>
-        </button>
+      <div class="grid grid-cols-4 border-b border-slate-800 text-[11px] font-medium text-slate-400 bg-slate-900">
+        <button class="tab-btn tab-active py-2.5 px-1 text-center transition" data-tab="tab-ocr">OCR Edit</button>
+        <button class="tab-btn py-2.5 px-1 text-center transition" data-tab="tab-text">Teks & Maps</button>
+        <button class="tab-btn py-2.5 px-1 text-center transition" data-tab="tab-layers">Sakelar Elemen</button>
+        <button class="tab-btn py-2.5 px-1 text-center transition" data-tab="tab-brand">Logo & Profil</button>
       </div>
 
-      <!-- Tab Content Scrollable Area -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-5">
+      <!-- Tab Contents -->
+      <div class="flex-1 overflow-y-auto p-3.5 space-y-4">
 
-        <!-- TAB 0: OCR IN-PLACE EDIT (DIRECT ON PHOTO) -->
-        <div id="tabOcrInPlace" class="tab-panel hidden space-y-4">
-          <div class="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 p-4 rounded-2xl border border-amber-500/30 space-y-3">
-            <div class="flex items-start gap-2.5">
-              <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
-                <i data-lucide="scan-text" class="w-5 h-5"></i>
-              </div>
-              <div>
-                <h3 class="text-sm font-bold text-white">Deteksi & Edit Teks Langsung di Foto</h3>
-                <p class="text-xs text-slate-300 mt-0.5">Mempertahankan peta, badge, dan footer asli foto. Hanya mengganti baris teks yang Anda klik langsung pada posisinya.</p>
-              </div>
+        <!-- TAB 1: OCR IN-PLACE EDIT -->
+        <div id="tab-ocr" class="tab-panel space-y-3.5">
+          <div class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-semibold text-white flex items-center gap-1.5">
+                <i data-lucide="scan-line" class="w-3.5 h-3.5 text-emerald-400"></i>
+                Deteksi Teks Otomatis & Seleksi
+              </h3>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Deteksi baris teks yang ada di foto, lalu klik kotak di kanvas atau daftar di bawah untuk mengubah isinya langsung di tempat aslinya.
+            </p>
+            <div class="grid grid-cols-2 gap-2">
+              <button id="btnRunOCR" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow">
+                <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+                <span>Scan OCR Foto</span>
+              </button>
+              <button id="btnAddManualBox" class="bg-slate-700 hover:bg-slate-600 text-slate-100 font-medium py-2 px-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition border border-slate-600">
+                <i data-lucide="box-select" class="w-3.5 h-3.5 text-sky-400"></i>
+                <span>Seleksi Manual</span>
+              </button>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button id="btnRunOcrInPlace" class="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition cursor-pointer">
-                <i data-lucide="sparkles" class="w-4 h-4"></i>
-                <span>Deteksi Teks (OCR)</span>
-              </button>
-              <button id="btnToggleManualSelect" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer">
-                <i data-lucide="box-select" class="w-4 h-4 text-blue-400"></i>
-                <span>Seleksi Area Manual</span>
-              </button>
-            </div>
-
-            <!-- OCR Progress Bar -->
-            <div id="ocrProgressBox" class="hidden space-y-1.5 pt-1">
-              <div class="flex justify-between text-[11px] text-amber-300">
-                <span id="ocrStatusText">Memindai koordinat teks...</span>
-                <span id="ocrPercentText">0%</span>
+            <!-- OCR Progress -->
+            <div id="ocrStatusBox" class="hidden bg-slate-950 border border-slate-800 rounded-lg p-2.5 space-y-1.5">
+              <div class="flex items-center justify-between text-[11px]">
+                <span id="ocrStatusText" class="text-sky-400 font-medium">Memindai gambar...</span>
+                <span id="ocrPercent" class="text-slate-400">0%</span>
               </div>
-              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div id="ocrProgressBar" class="bg-amber-400 h-full transition-all duration-200" style="width: 0%"></div>
+              <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div id="ocrProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-200"></div>
               </div>
             </div>
           </div>
 
-          <!-- Active Selected In-Place Text Box Editor -->
-          <div id="inPlaceEditorCard" class="hidden bg-slate-800/70 p-4 rounded-2xl border border-blue-500/50 space-y-3 shadow-lg">
+          <!-- Glyph Masking & Inpainting Fine-Tuning (Strategi 1 + 2 + 4) -->
+          <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-2.5">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit Baris Terpilih
+              <span class="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                Presisi Glyph Inpainting (1+2+4)
               </span>
-              <button id="btnDeleteOcrBox" class="text-[11px] text-red-400 hover:underline cursor-pointer">Hapus Editan Baris Ini</button>
+              <label class="flex items-center gap-1.5 text-[10px] text-slate-300 cursor-pointer">
+                <input type="checkbox" id="showGlyphMaskPreview" class="accent-rose-500 rounded" />
+                <span>Lihat Masker Huruf</span>
+              </label>
             </div>
 
             <div>
-              <label class="block text-[11px] text-slate-400 mb-1">Teks Pengganti (Dirender tepat di posisi asli):</label>
-              <input id="inpInPlaceText" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-medium focus:border-blue-500 outline-none" />
-            </div>
-
-            <div class="grid grid-cols-3 gap-2">
-              <div>
-                <label class="block text-[11px] text-slate-400 mb-1">Ukuran Font</label>
-                <input id="inpInPlaceFontSize" type="number" min="10" max="150" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none" />
+              <div class="flex justify-between text-[10px] text-slate-400 mb-1">
+                <span>Sensitivitas Deteksi Piksel Huruf</span>
+                <span id="glyphThreshVal">Auto (Otsu)</span>
               </div>
-              <div>
-                <label class="block text-[11px] text-slate-400 mb-1">Ketebalan</label>
-                <select id="inpInPlaceWeight" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white outline-none">
-                  <option value="500">Normal (500)</option>
-                  <option value="600">SemiBold</option>
-                  <option value="700">Bold (Judul)</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-[11px] text-slate-400 mb-1">Warna Teks</label>
-                <input id="inpInPlaceColor" type="color" value="#ffffff" class="w-full h-8 bg-slate-950 border border-slate-700 rounded-xl p-0.5 cursor-pointer" />
+              <input type="range" id="glyphSensitivity" min="-35" max="35" value="0" class="w-full accent-sky-500" />
+              <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+                <span>Lebih Ketat (Latar Terang)</span>
+                <span>Standar</span>
+                <span>Lebih Luas (Halo Tebal)</span>
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-2 pt-1">
               <div>
-                <div class="flex justify-between text-[11px] text-slate-400">
-                  <span>Haluskan Background</span>
-                  <span id="lblPatchBlur">14px</span>
+                <div class="flex justify-between text-[10px] text-slate-400 mb-1">
+                  <span>Radius Halo/Shadow</span>
+                  <span id="haloRadiusVal">2 px</span>
                 </div>
-                <input id="inpInPlaceBlur" type="range" min="4" max="32" value="14" class="w-full cursor-pointer" />
+                <input type="range" id="haloRadius" min="1" max="4" value="2" class="w-full accent-emerald-500" />
               </div>
-              <div class="flex items-end justify-end">
-                <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                  <input id="chkShowOcrGuides" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-blue-600" />
-                  <span>Tampilkan Kotak Panduan</span>
-                </label>
+              <div>
+                <div class="flex justify-between text-[10px] text-slate-400 mb-1">
+                  <span>Sensor Grain Match</span>
+                  <span id="grainStrengthVal">100%</span>
+                </div>
+                <input type="range" id="grainStrength" min="0" max="150" value="100" class="w-full accent-emerald-500" />
               </div>
             </div>
           </div>
 
-          <!-- Detected Text Lines List -->
-          <div class="space-y-2">
+          <!-- Active OCR Box Editor -->
+          <div id="activeOcrEditor" class="hidden bg-sky-950/40 border border-sky-500/40 rounded-xl p-3 space-y-2.5">
             <div class="flex items-center justify-between">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Baris Teks Terdeteksi (<span id="ocrLineCount">0</span>)</h3>
-              <button id="btnClearAllOcrBoxes" class="text-[11px] text-slate-400 hover:text-red-400 cursor-pointer">Bersihkan Semua</button>
+              <span class="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                Edit Baris Terpilih
+              </span>
+              <button id="btnDeleteOcrBox" class="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1">
+                <i data-lucide="trash-2" class="w-3 h-3"></i> Hapus Kotak
+              </button>
             </div>
-            <div id="ocrDetectedList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-              <div class="text-xs text-slate-500 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-center">
-                Belum ada teks terdeteksi. Klik <strong>Deteksi Teks (OCR)</strong> atau gunakan <strong>Seleksi Area Manual</strong> di atas foto.
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-1">Teks Asli Terbaca:</label>
+              <div id="ocrOriginalTextDisplay" class="text-[11px] text-slate-400 bg-slate-950/70 px-2 py-1 rounded border border-slate-800 truncate">-</div>
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-300 mb-1">Teks Pengganti (Langsung Dirender Tajam):</label>
+              <input type="text" id="ocrReplacementInput" class="w-full bg-slate-950 border border-sky-500/50 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none" />
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[10px] text-slate-400 mb-1">Ukuran Font</label>
+                <input type="number" id="ocrBoxFontSize" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400 mb-1">Warna Teks</label>
+                <input type="color" id="ocrBoxColor" value="#ffffff" class="w-full h-7 bg-slate-950 border border-slate-700 rounded cursor-pointer" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400 mb-1">Ketebalan</label>
+                <select id="ocrBoxWeight" class="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs text-white">
+                  <option value="400">Regular</option>
+                  <option value="500" selected>Medium</option>
+                  <option value="700">Bold</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] text-slate-400 mb-1">Kuat Shadow Teks</label>
+                <input type="range" id="ocrBoxShadow" min="0" max="100" value="75" class="w-full accent-sky-500" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400 mb-1">Geser Halus Y (px)</label>
+                <input type="range" id="ocrBoxOffsetY" min="-15" max="15" value="0" class="w-full accent-sky-500" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Detected OCR Lines List -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold text-slate-300">Daftar Baris Teks (<span id="ocrCount">0</span>)</span>
+              <div class="flex items-center gap-2">
+                <label class="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                  <input type="checkbox" id="showOcrGuides" checked class="accent-sky-500 rounded" />
+                  <span>Garis Bantu</span>
+                </label>
+                <button id="btnClearAllOcr" class="text-[10px] text-slate-400 hover:text-rose-400">Reset</button>
+              </div>
+            </div>
+            <div id="ocrLinesList" class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+              <div class="text-[11px] text-slate-500 text-center py-4 border border-dashed border-slate-800 rounded-lg">
+                Belum ada kotak teks. Klik <b>Scan OCR Foto</b> atau <b>Seleksi Manual</b> untuk mengedit tulisan langsung di foto.
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TAB 1: SAKELAR ELEMEN (TOGGLE AKTIF / PAKAI ASLI DI FOTO) -->
-        <div id="tabComponents" class="tab-panel hidden space-y-4">
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-2">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-400">Kontrol Overlay vs Asli Foto</h2>
-            <p class="text-xs text-slate-400">Nonaktifkan sakelar pada komponen yang ingin Anda pertahankan langsung dari foto asli (tidak ditimpa).</p>
+        <!-- TAB 2: TEKS & LOKASI (UNTUK STEMPEL BARU / OVERLAY) -->
+        <div id="tab-text" class="tab-panel hidden space-y-3">
+          <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-2.5 text-[11px] text-slate-300">
+            Pengaturan data geotag ini digunakan untuk <b>Mode B (Stempel Baru)</b> atau jika komponen <b>Blok Teks Geotag</b> & <b>Mini-Map</b> diaktifkan pada tab <i>Sakelar Elemen</i>.
           </div>
 
-          <div class="space-y-2.5">
-            <!-- Toggle 1: Badge -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Badge Kode Wilayah (5201)</div>
-                <div class="text-[11px] text-slate-400">OFF = Pakai badge asli dari foto</div>
-              </div>
-              <input id="tglShowBadge" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-
-            <!-- Toggle 2: Mini-Map -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Kotak Mini-Map Satelit</div>
-                <div class="text-[11px] text-slate-400">OFF = Biarkan peta satelit asli di foto tetap utuh</div>
-              </div>
-              <input id="tglShowMap" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-
-            <!-- Toggle 3: Logo BPS di atas teks -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Logo BPS Resmi (di atas Judul)</div>
-                <div class="text-[11px] text-slate-400">OFF = Pakai logo asli yang ada di foto</div>
-              </div>
-              <input id="tglShowLogoAbove" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-
-            <!-- Toggle 4: Blok Teks Geotag Baru -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Blok Teks Geotag Baru (Full Block)</div>
-                <div class="text-[11px] text-slate-400">OFF = Jangan timpa teks (gunakan OCR In-Place)</div>
-              </div>
-              <input id="tglShowTextBlock" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-
-            <!-- Toggle 5: Footer Putih Bawah -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Footer Putih Bawah (Profil & Logo BPS)</div>
-                <div class="text-[11px] text-slate-400">OFF = Biarkan footer asli foto tetap utuh</div>
-              </div>
-              <input id="tglShowFooter" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-
-            <!-- Toggle 6: Side Verified -->
-            <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 cursor-pointer">
-              <div>
-                <div class="text-xs font-bold text-white">Watermark Vertikal Kanan (Verified)</div>
-                <div class="text-[11px] text-slate-400">OFF = Pakai watermark vertikal asli foto</div>
-              </div>
-              <input id="tglShowSideVerified" type="checkbox" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
-            </label>
-          </div>
-
-          <!-- Global Scale & Position Reset -->
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-slate-300">Skala Global Overlay Baru</span>
-              <span id="lblGlobalScale" class="text-xs font-mono text-blue-400">100%</span>
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Kode Wilayah</label>
+              <input type="text" id="inpRegionCode" value="5201" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
             </div>
-            <input id="inpGlobalScale" type="range" min="60" max="150" value="100" class="w-full cursor-pointer" />
-            <button id="btnResetLayout" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 cursor-pointer">
+            <div class="col-span-2">
+              <label class="block text-[11px] text-slate-400 mb-1">Judul Kegiatan</label>
+              <input type="text" id="inpTitle" value="Perjadin BPS" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- Date & Time -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Tanggal</label>
+              <input type="date" id="inpDate" value="2026-11-16" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div class="grid grid-cols-2 gap-1">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Jam</label>
+                <input type="time" id="inpTime" value="08:07" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Zona</label>
+                <select id="inpTimezone" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-1 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none">
+                  <option value="GMT+8" selected>GMT+8</option>
+                  <option value="GMT+7">GMT+7</option>
+                  <option value="GMT+9">GMT+9</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Address -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] text-slate-400">Alamat Lengkap</label>
+              <button id="btnSearchAddress" class="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                <i data-lucide="search" class="w-3 h-3"></i> Cari & Update Peta
+              </button>
+            </div>
+            <textarea id="inpAddress" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none leading-relaxed">Jl. Soekarno - Hatta, Dasan Geres, Kec. Gerung, Kabupaten Lombok Barat, Nusa Tenggara Bar. 83363</textarea>
+          </div>
+
+          <!-- Coordinates -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Latitude</label>
+              <input type="number" step="0.000001" id="inpLat" value="-8.684020" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Longitude</label>
+              <input type="number" step="0.000001" id="inpLng" value="116.137824" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- Altitude & Compass -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Altitude (m)</label>
+              <input type="text" id="inpAltitude" value="60.3 m" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Arah Kompas (°)</label>
+              <div class="flex items-center gap-1.5">
+                <input type="number" min="0" max="360" id="inpCompassDeg" value="138" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
+                <span id="compassDirBadge" class="text-[11px] font-semibold bg-slate-800 px-2 py-1.5 rounded-lg text-emerald-400 shrink-0">SE</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Photo Code -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] text-slate-400">Photo Code</label>
+              <button id="btnGenCode" class="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                <i data-lucide="refresh-cw" class="w-3 h-3"></i> Acak Kode
+              </button>
+            </div>
+            <input type="text" id="inpPhotoCode" value="U1NXW2KXLWXPBE" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-amber-300 focus:border-sky-500 focus:outline-none" />
+          </div>
+
+          <!-- Satellite Map Refresh -->
+          <div class="pt-1 border-t border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-medium text-slate-300">Zoom Mini-Map Satelit: <span id="zoomVal">17</span></span>
+              <button id="btnSyncMap" class="text-[11px] bg-sky-600 hover:bg-sky-500 text-white px-2.5 py-1 rounded-md font-medium flex items-center gap-1">
+                <i data-lucide="satellite" class="w-3 h-3"></i> Muat Ulang Peta
+              </button>
+            </div>
+            <input type="range" id="inpMapZoom" min="13" max="19" value="17" class="w-full accent-sky-500" />
+          </div>
+        </div>
+
+        <!-- TAB 3: SAKELAR ELEMEN (AKTIF / PAKAI ASLI FOTO) -->
+        <div id="tab-layers" class="tab-panel hidden space-y-3">
+          <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 space-y-2">
+            <h3 class="text-xs font-semibold text-white">Kontrol Elemen Overlay</h3>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Nonaktifkan elemen jika foto Anda <b>sudah memiliki maps, badge, atau footer asli</b> sehingga tidak tertimpa.
+            </p>
+            <div class="flex gap-2 pt-1">
+              <button id="btnPresetKeepOriginal" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-medium py-1.5 px-2 rounded-lg border border-slate-600">
+                Pakai Semua Asli Foto
+              </button>
+              <button id="btnPresetFullTemplate" class="flex-1 bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-medium py-1.5 px-2 rounded-lg">
+                Aktifkan Semua Template
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">1. Badge Kode Wilayah (5201)</div>
+                <div class="text-[10px] text-slate-400">Matikan jika foto sudah ada kotak 5201 asli</div>
+              </div>
+              <input type="checkbox" id="chkBadge" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">2. Kotak Mini-Map Satelit</div>
+                <div class="text-[10px] text-slate-400">Matikan untuk mempertahankan peta asli foto</div>
+              </div>
+              <input type="checkbox" id="chkMap" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">3. Logo BPS di Atas Teks</div>
+                <div class="text-[10px] text-slate-400">Matikan jika logo BPS di foto sudah ada</div>
+              </div>
+              <input type="checkbox" id="chkMainLogo" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">4. Blok Teks Geotag Baru</div>
+                <div class="text-[10px] text-slate-400">Matikan saat memakai Edit OCR In-Place</div>
+              </div>
+              <input type="checkbox" id="chkTextBlock" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">5. Footer Putih & Logo BPS Kanan</div>
+                <div class="text-[10px] text-slate-400">Matikan jika footer petugas di foto sudah ada</div>
+              </div>
+              <input type="checkbox" id="chkFooter" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2.5 rounded-lg cursor-pointer hover:border-slate-700">
+              <div>
+                <div class="text-xs font-medium text-slate-200">6. Watermark Vertikal Kanan</div>
+                <div class="text-[10px] text-slate-400">Teks vertikal Timemark Verified di tepi kanan</div>
+              </div>
+              <input type="checkbox" id="chkRightWatermark" class="w-4 h-4 accent-sky-500 rounded" />
+            </label>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-slate-300">Skala Elemen Overlay</span>
+              <span id="scaleVal" class="text-xs font-mono text-sky-400">100%</span>
+            </div>
+            <input type="range" id="inpOverlayScale" min="60" max="150" value="100" class="w-full accent-sky-500" />
+            <button id="btnResetPositions" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-1.5 rounded-lg text-xs">
               Reset Posisi Overlay Default
             </button>
           </div>
         </div>
 
-        <!-- TAB 2: GEOTAG & TEKS (FOR FULL OVERLAY BLOCK) -->
-        <div id="tabGeotag" class="tab-panel space-y-4">
-          <div class="flex items-center justify-between">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Data Blok Geotag (Mode Stempel Baru)</h2>
-            <button id="btnAutoFillNow" class="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer">
-              <i data-lucide="clock" class="w-3 h-3"></i> Waktu Sekarang
-            </button>
-          </div>
-
-          <div class="space-y-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
-            <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Judul Kegiatan</label>
-              <input id="inpTitle" type="text" value="Perjadin BPS" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+        <!-- TAB 4: LOGO BPS RESMI & PROFIL -->
+        <div id="tab-brand" class="tab-panel hidden space-y-3.5">
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-white">Logo BPS Resmi</span>
+              <span id="logoSourceStatus" class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Logo BPS Aktif</span>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Tanggal & Jam</label>
-                <input id="inpDateTimePicker" type="datetime-local" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Zona Waktu</label>
-                <select id="inpTimezone" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none">
-                  <option value="GMT+8" selected>GMT+8 (WITA)</option>
-                  <option value="GMT+7">GMT+7 (WIB)</option>
-                  <option value="GMT+9">GMT+9 (WIT)</option>
-                </select>
+            <div class="flex items-center gap-3 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+              <img id="logoPreviewThumb" alt="Logo BPS" class="w-12 h-12 object-contain bg-white/5 rounded p-1 border border-slate-700" />
+              <div class="text-[11px] text-slate-300 space-y-1">
+                <p class="font-medium text-white">Badan Pusat Statistik (BPS)</p>
+                <p class="text-[10px] text-slate-400">Tersedia otomatis dari sumber resmi & aman untuk export.</p>
               </div>
             </div>
 
-            <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Teks Waktu Terformat</label>
-              <input id="inpFormattedDate" type="text" value="Mon, 16 Nov 2026 08:07 GMT+8" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between pt-1">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Lokasi & Koordinat GPS</h2>
-            <button id="btnReverseGeocode" class="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer">
-              <i data-lucide="refresh-cw" class="w-3 h-3"></i> Ambil Alamat dari Lat/Lng
-            </button>
-          </div>
-
-          <div class="space-y-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
-            <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Alamat Lengkap</label>
-              <textarea id="inpAddress" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none resize-none">Jl. Soekarno - Hatta, Dasan Geres, Kec. Gerung, Kabupaten Lombok Barat, Nusa Tenggara Bar. 83363</textarea>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Latitude</label>
-                <input id="inpLat" type="number" step="0.000001" value="-8.684020" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:border-blue-500 outline-none" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Longitude</label>
-                <input id="inpLng" type="number" step="0.000001" value="116.137824" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:border-blue-500 outline-none" />
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Teks Koordinat Tampil</label>
-              <input id="inpCoordText" type="text" value="8.684020°S, 116.137824°E" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-amber-300 focus:border-blue-500 outline-none" />
-            </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Altitude (mdpl)</label>
-                <input id="inpAltitude" type="text" value="60.3 m" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Compass</label>
-                <input id="inpCompassText" type="text" value="138° SE" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-              </div>
-            </div>
-
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label class="text-xs font-medium text-slate-300">Photo Code</label>
-                <button id="btnGenCode" class="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer">
-                  <i data-lucide="shuffle" class="w-3 h-3"></i> Acak Kode
-                </button>
-              </div>
-              <input id="inpPhotoCode" type="text" value="U1NXW2KXLWXPBE" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono tracking-wider text-emerald-400 focus:border-blue-500 outline-none uppercase" />
-            </div>
-          </div>
-        </div>
-
-        <!-- TAB 3: MINI-MAP & ARAH -->
-        <div id="tabMap" class="tab-panel hidden space-y-4">
-          <div class="flex items-center justify-between">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Mini-Map Satelit Interaktif</h2>
-            <label class="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold cursor-pointer">
-              <input id="tglShowMapSecondary" type="checkbox" checked class="accent-emerald-500 rounded" />
-              <span>Aktifkan Map Baru</span>
-            </label>
-          </div>
-
-          <!-- Search Address Bar -->
-          <div class="flex gap-2">
-            <input id="inpMapSearch" type="text" placeholder="Cari desa/kecamatan (mis: Sesaot Narmada)..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none" />
-            <button id="btnMapSearch" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer">
-              Cari
-            </button>
-          </div>
-
-          <!-- Leaflet Interactive Map Container -->
-          <div class="relative rounded-2xl overflow-hidden border-2 border-slate-700 shadow-lg">
-            <div id="leafletMap" class="w-full h-56 bg-slate-800"></div>
-            <div class="bg-slate-900/90 px-3 py-1.5 text-[11px] text-slate-300 flex justify-between items-center border-t border-slate-800">
-              <span>Klik peta untuk pindah pin satelit</span>
-              <button id="btnCaptureMap" class="text-blue-400 font-semibold hover:underline cursor-pointer">Sinkronkan</button>
-            </div>
-          </div>
-
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-            <div>
-              <div class="flex justify-between text-xs mb-1">
-                <span class="font-medium text-slate-300">Arah Kerucut Kompas Hijau</span>
-                <span id="lblCompassDeg" class="font-mono text-emerald-400 font-bold">138° (SE)</span>
-              </div>
-              <input id="inpCompassAngle" type="range" min="0" max="359" value="138" class="w-full cursor-pointer" />
-            </div>
-
-            <div>
-              <div class="flex justify-between text-xs mb-1">
-                <span class="font-medium text-slate-300">Zoom Satelit Mini-Map</span>
-                <span id="lblMapZoom" class="font-mono text-blue-400">17</span>
-              </div>
-              <input id="inpMapZoom" type="range" min="13" max="19" value="17" class="w-full cursor-pointer" />
-            </div>
-
-            <div class="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
-              <label for="customMapUpload" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 cursor-pointer transition">
-                <i data-lucide="image-plus" class="w-3.5 h-3.5 text-blue-400"></i>
-                <span>Upload Potongan Peta</span>
-                <input id="customMapUpload" type="file" accept="image/*" class="hidden" />
-              </label>
-              <button id="btnResetCustomMap" class="hidden px-3 py-2 rounded-xl bg-red-500/20 text-red-300 text-xs border border-red-500/30 cursor-pointer">
-                Reset
+            <div class="grid grid-cols-2 gap-2">
+              <button id="btnLoadOfficialBps" class="bg-sky-600 hover:bg-sky-500 text-white py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1">
+                <i data-lucide="globe" class="w-3 h-3"></i> Muat Logo BPS
               </button>
+              <label class="cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1">
+                <i data-lucide="upload" class="w-3 h-3"></i> Upload PNG
+                <input type="file" id="logoInput" accept="image/*" class="hidden" />
+              </label>
             </div>
-          </div>
-        </div>
-
-        <!-- TAB 4: LOGO BPS RESMI, PROFIL & BADGE -->
-        <div id="tabProfile" class="tab-panel hidden space-y-4">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Logo Resmi Badan Pusat Statistik (BPS)</h2>
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-            <div class="flex items-center gap-3">
-              <div class="w-16 h-14 rounded-xl bg-white p-1.5 flex items-center justify-center border border-slate-600 shrink-0">
-                <img id="previewBpsLogoBox" src="" alt="Preview Logo BPS" class="max-w-full max-h-full object-contain" />
-              </div>
-              <div class="flex-1 space-y-1.5">
-                <div class="flex flex-wrap gap-1.5">
-                  <button id="btnFetchWikimediaBps" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold text-white cursor-pointer">
-                    Muat Logo BPS Resmi
-                  </button>
-                  <label for="logoUploadInput" class="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-[11px] text-white cursor-pointer">
-                    Upload Logo Sendiri
-                    <input id="logoUploadInput" type="file" accept="image/*" class="hidden" />
-                  </label>
-                </div>
-                <a href="https://www.google.com/search?tbm=isch&q=logo+badan+pusat+statistik+png+transparan" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:underline">
-                  <i data-lucide="external-link" class="w-3 h-3"></i> Cari Logo BPS di Google Images
-                </a>
-              </div>
-            </div>
+            <a href="https://www.google.com/search?tbm=isch&q=logo+bps+png+transparan" target="_blank" rel="noopener" class="block text-center text-[10px] text-sky-400 hover:underline">
+              Cari variasi logo BPS di Google Images ↗
+            </a>
           </div>
 
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Badge Kode Wilayah (Pojok Kiri Atas)</h2>
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-            <div class="grid grid-cols-3 gap-2.5 items-end">
-              <div class="col-span-2">
-                <label class="block text-xs font-medium text-slate-300 mb-1">Kode Wilayah / Satker</label>
-                <input id="inpBadgeCode" type="text" value="5201" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:border-blue-500 outline-none" />
+          <!-- Staff Profile -->
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2.5">
+            <h3 class="text-xs font-semibold text-white">Profil Footer Petugas</h3>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Nama Petugas</label>
+                <input type="text" id="inpStaffName" value="Aliefta Zulvansyah B" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Warna Badge</label>
-                <input id="inpBadgeColor" type="color" value="#e478dc" class="w-full h-10 bg-slate-950 border border-slate-700 rounded-xl p-1 cursor-pointer" />
+                <label class="block text-[11px] text-slate-400 mb-1">Jabatan</label>
+                <input type="text" id="inpStaffRole" value="Staff" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none" />
               </div>
             </div>
-          </div>
-
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Footer Petugas Bawah</h2>
-          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-            <div class="flex items-center gap-3">
-              <img id="previewAvatarThumb" src="" alt="Avatar" class="w-14 h-14 rounded-full object-cover border-2 border-blue-500 bg-slate-800" />
-              <div class="flex-1 space-y-1.5">
-                <label for="avatarUploadInput" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer transition">
-                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
-                  <span>Ganti Foto Profil</span>
-                  <input id="avatarUploadInput" type="file" accept="image/*" class="hidden" />
-                </label>
-                <p class="text-[11px] text-slate-400">Otomatis dipotong bulat di footer putih</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Nama Petugas</label>
-                <input id="inpStaffName" type="text" value="Aliefta Zulvansyah B" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Jabatan / Peran</label>
-                <input id="inpStaffRole" type="text" value="Staff" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-              </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Foto Profil (Avatar Bulat)</label>
+              <label class="cursor-pointer w-full bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 flex items-center justify-center gap-1.5">
+                <i data-lucide="user-circle" class="w-3.5 h-3.5 text-sky-400"></i>
+                <span>Upload Foto Profil</span>
+                <input type="file" id="avatarInput" accept="image/*" class="hidden" />
+              </label>
             </div>
           </div>
         </div>
@@ -564,1699 +502,1449 @@
       </div>
     </aside>
 
-    <!-- RIGHT WORKSPACE: Live High-Res Canvas Preview -->
-    <section class="flex-1 flex flex-col canvas-bg relative overflow-hidden min-h-[520px] lg:h-[calc(100vh-65px)]">
-      
-      <!-- Canvas Top Toolbar -->
-      <div class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2 z-20">
-        <div class="flex items-center gap-3 text-xs text-slate-300">
-          <span id="canvasResolutionBadge" class="px-2 py-0.5 rounded bg-slate-800 font-mono text-[11px] text-blue-400 border border-slate-700">1200 × 1600 px</span>
-          <span id="interactionHint" class="text-slate-400 hidden sm:inline">Klik kotak teks OCR untuk edit langsung, atau seret elemen overlay</span>
+    <!-- Center Canvas Area -->
+    <main class="flex-1 canvas-bg flex flex-col relative overflow-hidden">
+      <!-- Canvas Toolbar -->
+      <div class="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
+        <div class="flex items-center gap-3 text-slate-400">
+          <span id="canvasDimLabel" class="font-mono text-[11px] text-slate-300">Resolusi: 1200 × 1600 px</span>
+          <span class="hidden md:inline text-slate-600">|</span>
+          <span id="canvasHint" class="hidden md:inline text-[11px] text-emerald-400">
+            Klik kotak teks pada foto untuk mengedit langsung dengan latar belakang tajam tanpa blur
+          </span>
         </div>
-
         <div class="flex items-center gap-2">
-          <button id="btnToggleCompare" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 flex items-center gap-1.5 cursor-pointer select-none">
-            <i data-lucide="eye" class="w-3.5 h-3.5 text-blue-400"></i>
-            <span>Tahan: Lihat Foto Asli</span>
-          </button>
+          <button id="btnZoomOut" class="p-1 hover:bg-slate-800 rounded text-slate-300" title="Perkecil Tampilan"><i data-lucide="zoom-out" class="w-3.5 h-3.5"></i></button>
+          <span id="viewZoomLabel" class="font-mono text-[11px] text-slate-300 w-10 text-center">Fit</span>
+          <button id="btnZoomIn" class="p-1 hover:bg-slate-800 rounded text-slate-300" title="Perbesar Tampilan"><i data-lucide="zoom-in" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
 
-      <!-- Canvas Viewport Container -->
-      <div id="canvasViewport" class="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-auto relative">
-        <div id="canvasWrapper" class="relative shadow-2xl shadow-black/80 rounded-lg overflow-hidden border border-slate-700/80 transition-transform">
-          <canvas id="mainCanvas" class="block max-w-full max-h-[76vh] w-auto h-auto cursor-grab"></canvas>
+      <!-- Canvas Viewport -->
+      <div id="canvasViewport" class="flex-1 overflow-auto flex items-center justify-center p-6 relative">
+        <div id="canvasWrapper" class="relative shadow-2xl shadow-black/80 border border-slate-700/80 bg-slate-900">
+          <canvas id="editorCanvas" class="block max-w-full max-h-[calc(100vh-130px)] cursor-pointer"></canvas>
+        </div>
+
+        <!-- Drop Zone Overlay -->
+        <div id="dropOverlay" class="hidden absolute inset-4 bg-sky-500/20 border-2 border-dashed border-sky-400 rounded-2xl flex items-center justify-center backdrop-blur-sm z-20 pointer-events-none">
+          <div class="bg-slate-900/90 px-6 py-4 rounded-xl text-center border border-sky-500/50">
+            <i data-lucide="upload-cloud" class="w-10 h-10 text-sky-400 mx-auto mb-2"></i>
+            <p class="text-sm font-semibold text-white">Lepaskan Foto di Sini</p>
+          </div>
         </div>
       </div>
-
-      <!-- Hidden Offscreen Canvas for Map Tile Compositing -->
-      <canvas id="mapOffscreenCanvas" width="320" height="320" class="hidden"></canvas>
-    </section>
-
-  </main>
+    </main>
+  </div>
 
   <script>
-    /**
-     * TIMEMARK BPS EDITOR & OVERLAY STUDIO
-     * Single-file Client-Side Web Application with In-Place OCR Editing & Official BPS Logo
-     */
+    lucide.createIcons();
 
-    // ==========================================
-    // 1. OFFICIAL BPS LOGO (WIKIMEDIA + HIGH-RES VECTOR FALLBACK)
-    // ==========================================
-    const WIKIMEDIA_BPS_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/2/28/Lambang_Badan_Pusat_Statistik_%28BPS%29_Indonesia.svg';
-
-    // Exact official BPS 3-bar curved geometric emblem (#0066B3 Blue, #7AC143 Green, #F7941D Orange)
-    const OFFICIAL_BPS_LOGO_SVG = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 210" width="260" height="210">
-        <defs>
-          <filter id="bpsShadow" x="-15%" y="-15%" width="130%" height="130%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.35"/>
-          </filter>
-        </defs>
-        <g filter="url(#bpsShadow)">
-          <!-- White outer contour so emblem pops clearly over dark & light backgrounds -->
-          <path d="M48,132 C34,116 32,92 48,74 L74,44 C82,35 95,35 102,44 L112,56 L138,28 C146,19 160,19 167,28 L212,80 C226,96 224,122 208,138 L176,170 C166,180 150,180 140,170 L124,154 L106,172 C96,182 80,182 70,172 Z" fill="#ffffff" opacity="0.95"/>
-          
-          <!-- Blue Element (Left Chevron / Data Bar - #0066B3) -->
-          <path d="M56,124 C45,112 45,94 56,82 L84,52 C89,47 97,47 102,52 L126,78 L98,108 L116,128 L94,152 C89,157 81,157 76,152 Z" fill="#0066B3"/>
-          
-          <!-- Orange Element (Right Chevron / Data Bar - #F7941D) -->
-          <path d="M122,64 L148,36 C153,31 161,31 166,36 L204,78 C215,90 215,108 204,120 L176,150 C171,155 163,155 158,150 L134,124 L162,94 L144,74 Z" fill="#F7941D"/>
-          
-          <!-- Green Element (Bottom Interlocking Chevron - #7AC143) -->
-          <path d="M88,144 L126,104 L164,144 C169,149 169,157 164,162 L152,174 C147,179 139,179 134,174 L126,166 L118,174 C113,179 105,179 100,174 L88,162 C83,157 83,149 88,144 Z" fill="#7AC143"/>
+    const OFFICIAL_BPS_SVG = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 175" width="220" height="175">
+        <g transform="translate(8,8)">
+          <path d="M98 18 C52 24, 18 52, 12 88 C28 65, 58 48, 96 44 L106 18 Z" fill="#0066B3"/>
+          <path d="M55 44 L40 94 L60 94 L72 52 Z" fill="#0066B3"/>
+          <path d="M84 36 L68 94 L88 94 L102 36 Z" fill="#0066B3"/>
+          <path d="M108 16 C152 16, 188 42, 196 76 C176 54, 146 42, 112 42 L102 68 L142 68 L136 86 L96 86 L90 104 L148 104 C172 104, 190 92, 198 76 C194 108, 166 124, 134 124 L84 124 L108 16 Z" fill="#F7941D"/>
+          <path d="M16 104 C28 134, 64 152, 112 152 C152 152, 184 134, 196 106 C174 124, 144 134, 112 134 C76 134, 46 122, 28 104 Z" fill="#7AC143"/>
+          <path d="M52 102 L42 136 L62 136 L70 108 L128 108 L124 122 L66 122 L62 136 L138 136 L148 102 Z" fill="#7AC143"/>
         </g>
       </svg>
     `;
 
-    const DEFAULT_AVATAR_SVG = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
-        <rect width="200" height="200" fill="#dbeafe"/>
-        <circle cx="100" cy="76" r="38" fill="#1e3a8a"/>
-        <path d="M36,186 C36,142 164,142 164,186 Z" fill="#1e40af"/>
-        <path d="M82,135 L100,162 L118,135 Z" fill="#ffffff"/>
-        <path d="M95,142 L105,142 L103,172 L97,172 Z" fill="#dc2626"/>
-      </svg>
-    `;
-
-    // ==========================================
-    // 2. APPLICATION STATE
-    // ==========================================
     const state = {
-      mode: 'new', // 'edit' (Mode A: OCR In-Place) | 'new' (Mode B: Full Template Stamp)
-      baseImage: null,
-      mapSnapshot: null,
-      customMapImage: null,
+      mode: 'inplace', // 'inplace' | 'overlay'
+      bgImage: null,
       logoImage: null,
       avatarImage: null,
-      showOriginalOnly: false,
-      isExporting: false,
-
-      // Independent Component Toggles (True = Render New Overlay, False = Keep Original Photo)
-      enableBadge: true,
-      enableMap: true,
-      enableLogoAbove: true,
-      enableTextBlock: true,
-      enableFooter: true,
-      enableSideVerified: true,
-
-      // Geotag & Text Data (Mode B)
-      badgeCode: '5201',
-      badgeColor: '#e478dc',
-
-      title: 'Perjadin BPS',
-      formattedDate: 'Mon, 16 Nov 2026 08:07 GMT+8',
-      timezone: 'GMT+8',
-      address: 'Jl. Soekarno - Hatta, Dasan Geres, Kec. Gerung, Kabupaten Lombok Barat, Nusa Tenggara Bar. 83363',
-      lat: -8.684020,
-      lng: 116.137824,
-      coordText: '8.684020°S, 116.137824°E',
-      altitude: '60.3 m',
-      compassAngle: 138,
-      compassText: '138° SE',
-      photoCode: 'U1NXW2KXLWXPBE',
-
-      // Profile & Footer Data
-      staffName: 'Aliefta Zulvansyah B',
-      staffRole: 'Staff',
-
-      // Layout Positions (in percentage 0-100)
-      globalScale: 1.0,
-      badgePos: { x: 3.0, y: 2.5 },
-      mapPos: { x: 3.0, y: 10.5 },
-      textPos: { x: 3.0, y: 63.0 },
-
-      // Interactive Dragging State
+      mapCanvas: null,
+      canvasWidth: 1200,
+      canvasHeight: 1600,
+      viewZoom: null,
+      overlayScale: 1.0,
+      layers: {
+        badge: false,
+        map: false,
+        mainLogo: false,
+        textBlock: false,
+        footer: false,
+        rightWatermark: false
+      },
+      positions: {
+        badge: { x: 0.03, y: 0.025 },
+        map: { x: 0.03, y: 0.095 },
+        textBlock: { x: 0.03, y: 0.56 }
+      },
       draggingTarget: null,
       dragOffset: { x: 0, y: 0 },
-      boundingBoxes: {
-        badge: null,
-        map: null,
-        text: null
-      },
-
-      // In-Place OCR Editable Boxes (Mode A)
-      // Each item: { id, originalText, text, edited, bbox: {x0, y0, x1, y1}, fontSize, fontWeight, color, blurRadius }
+      isDrawingManualBox: false,
+      manualBoxStart: null,
+      manualBoxCurrent: null,
       ocrBoxes: [],
       selectedOcrId: null,
       showOcrGuides: true,
-      manualSelectActive: false,
-      isSelectingBox: false,
-      selectStartPt: null,
-      selectCurrentPt: null
+      showGlyphMaskPreview: false,
+      glyphSensitivity: 0,
+      haloRadius: 2,
+      grainStrength: 1.0
     };
 
-    // ==========================================
-    // 3. DOM REFERENCES
-    // ==========================================
-    const canvas = document.getElementById('mainCanvas');
-    const ctx = canvas.getContext('2d');
-    const mapOffscreenCanvas = document.getElementById('mapOffscreenCanvas');
-    const mapOffCtx = mapOffscreenCanvas.getContext('2d');
+    const canvas = document.getElementById('editorCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    // ==========================================
-    // 4. UTILITY FUNCTIONS
-    // ==========================================
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      const colors = {
-        info: 'bg-slate-800 border-blue-500/50 text-slate-100',
-        success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-100',
-        warning: 'bg-amber-950/95 border-amber-500/60 text-amber-100',
-        error: 'bg-red-950/95 border-red-500/60 text-red-100'
-      };
-      toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-xl text-xs font-medium flex items-center gap-2.5 transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
-      toast.innerHTML = `<span>${message}</span>`;
-      container.appendChild(toast);
+    // Offscreen canvas holding pure original photo pixels (never contaminated by overlays)
+    const origCanvas = document.createElement('canvas');
+    const origCtx = origCanvas.getContext('2d', { willReadFrequently: true });
 
-      requestAnimationFrame(() => {
-        toast.classList.remove('translate-y-2', 'opacity-0');
-      });
+    function loadOfficialBpsLogo() {
+      const statusEl = document.getElementById('logoSourceStatus');
+      const previewEl = document.getElementById('logoPreviewThumb');
+      const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(OFFICIAL_BPS_SVG);
 
-      setTimeout(() => {
-        toast.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
-    }
-
-    function loadImageFromURL(url) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = url;
-      });
-    }
-
-    function svgToImage(svgString) {
-      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      return loadImageFromURL(url);
-    }
-
-    async function loadOfficialBpsLogo() {
-      try {
-        const img = await loadImageFromURL(WIKIMEDIA_BPS_LOGO_URL);
-        state.logoImage = img;
-        document.getElementById('previewBpsLogoBox').src = WIKIMEDIA_BPS_LOGO_URL;
-        document.getElementById('navbarBpsLogo').src = WIKIMEDIA_BPS_LOGO_URL;
-        return img;
-      } catch (e) {
-        // CORS-safe high-resolution official BPS vector fallback
-        const fallbackImg = await svgToImage(OFFICIAL_BPS_LOGO_SVG);
+      const fallbackImg = new Image();
+      fallbackImg.onload = () => {
         state.logoImage = fallbackImg;
-        document.getElementById('previewBpsLogoBox').src = fallbackImg.src;
-        return fallbackImg;
+        previewEl.src = svgUrl;
+        renderCanvas();
+      };
+      fallbackImg.src = svgUrl;
+
+      const wikiUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Lambang_Badan_Pusat_Statistik_%28BPS%29_Indonesia.svg/512px-Lambang_Badan_Pusat_Statistik_%28BPS%29_Indonesia.svg.png';
+      const wikiImg = new Image();
+      wikiImg.crossOrigin = 'anonymous';
+      wikiImg.onload = () => {
+        state.logoImage = wikiImg;
+        previewEl.src = wikiUrl;
+        statusEl.textContent = 'Logo BPS Resmi (Wikimedia)';
+        renderCanvas();
+      };
+      wikiImg.onerror = () => {
+        statusEl.textContent = 'Logo BPS Resmi (Vektor)';
+      };
+      wikiImg.src = wikiUrl;
+    }
+
+    function createDefaultAvatar() {
+      const c = document.createElement('canvas');
+      c.width = 160; c.height = 160;
+      const g = c.getContext('2d');
+      g.fillStyle = '#e2e8f0';
+      g.fillRect(0, 0, 160, 160);
+      g.fillStyle = '#0f172a';
+      g.beginPath(); g.ellipse(80, 152, 54, 42, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.moveTo(64, 114); g.lineTo(96, 114); g.lineTo(80, 156); g.closePath(); g.fill();
+      g.fillStyle = '#dc2626';
+      g.beginPath(); g.moveTo(76, 118); g.lineTo(84, 118); g.lineTo(87, 154); g.lineTo(73, 154); g.closePath(); g.fill();
+      g.fillStyle = '#d99b72';
+      g.fillRect(68, 92, 24, 24);
+      g.beginPath(); g.ellipse(80, 68, 28, 34, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#1e293b';
+      g.beginPath(); g.ellipse(80, 44, 29, 16, 0, Math.PI, Math.PI * 2); g.fill();
+      const img = new Image();
+      img.onload = () => { state.avatarImage = img; renderCanvas(); };
+      img.src = c.toDataURL();
+    }
+
+    function createSampleBackground() {
+      const c = document.createElement('canvas');
+      c.width = 1200; c.height = 1600;
+      const g = c.getContext('2d');
+
+      // Textured realistic background (wood slats & green foliage) to demonstrate sharp glyph inpainting
+      const grad = g.createLinearGradient(0, 0, 1200, 1600);
+      grad.addColorStop(0, '#5c4033');
+      grad.addColorStop(0.5, '#3e2723');
+      grad.addColorStop(1, '#1b4332');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 1200, 1600);
+
+      // Wood grain lines & textured pattern behind text area
+      for (let x = 0; x < 1200; x += 24) {
+        g.fillStyle = x % 48 === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
+        g.fillRect(x, 0, 12, 1600);
       }
-    }
-
-    function formatLatLngDisplay(lat, lng) {
-      const latDir = lat < 0 ? 'S' : 'N';
-      const lngDir = lng < 0 ? 'W' : 'E';
-      return `${Math.abs(lat).toFixed(6)}°${latDir}, ${Math.abs(lng).toFixed(6)}°${lngDir}`;
-    }
-
-    function degreesToCardinal(deg) {
-      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      const idx = Math.round(((deg % 360) / 45)) % 8;
-      return dirs[idx];
-    }
-
-    function generateRandomCode(len = 14) {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let res = '';
-      for (let i = 0; i < len; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
+      for (let y = 0; y < 1600; y += 8) {
+        g.fillStyle = 'rgba(0,0,0,0.08)';
+        g.fillRect(0, y, 1200, 2);
       }
-      return res;
+
+      // Simulated existing Timemark text on sample photo
+      g.save();
+      g.shadowColor = 'rgba(0,0,0,0.65)';
+      g.shadowBlur = 4;
+      g.shadowOffsetX = 1;
+      g.shadowOffsetY = 2;
+      g.fillStyle = '#ffffff';
+      g.font = '700 44px Roboto, sans-serif';
+      g.fillText('Perjadin BPS', 48, 860);
+      g.font = '500 32px Roboto, sans-serif';
+      g.fillText('Mon, 16 Nov 2026 08:07 GMT+8', 48, 920);
+      g.fillText('Jl. Soekarno - Hatta, Dasan Geres, Kec.', 48, 980);
+      g.fillText('Gerung, Kabupaten Lombok Barat, NTB', 48, 1025);
+      g.fillText('8.684020°S, 116.137824°E', 48, 1085);
+      g.fillText('Altitude 60.3 m', 48, 1145);
+      g.fillText('Compass 138° SE', 48, 1205);
+      g.restore();
+
+      const img = new Image();
+      img.onload = () => {
+        setBackgroundImage(img);
+        // Pre-populate sample OCR boxes so user can test Glyph Inpainting immediately
+        state.ocrBoxes = [
+          {
+            id: 'sample-1',
+            originalText: 'Mon, 16 Nov 2026 08:07 GMT+8',
+            text: 'Mon, 16 Nov 2026 08:07 GMT+8',
+            x: 42, y: 886, w: 500, h: 46,
+            fontSize: 32, color: '#ffffff', weight: '500', shadowStrength: 75, offsetY: 0, edited: false
+          },
+          {
+            id: 'sample-2',
+            originalText: 'Jl. Soekarno - Hatta, Dasan Geres, Kec.',
+            text: 'Jl. Soekarno - Hatta, Dasan Geres, Kec.',
+            x: 42, y: 946, w: 610, h: 46,
+            fontSize: 32, color: '#ffffff', weight: '500', shadowStrength: 75, offsetY: 0, edited: false
+          },
+          {
+            id: 'sample-3',
+            originalText: '8.684020°S, 116.137824°E',
+            text: '8.684020°S, 116.137824°E',
+            x: 42, y: 1051, w: 430, h: 46,
+            fontSize: 32, color: '#ffffff', weight: '500', shadowStrength: 75, offsetY: 0, edited: false
+          }
+        ];
+        renderOcrList();
+        renderCanvas();
+      };
+      img.src = c.toDataURL();
     }
 
-    function formatTimemarkDate(dateObj, tz) {
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const d = days[dateObj.getDay()];
-      const dayNum = String(dateObj.getDate()).padStart(2, '0');
-      const m = months[dateObj.getMonth()];
-      const y = dateObj.getFullYear();
-      const hh = String(dateObj.getHours()).padStart(2, '0');
-      const mm = String(dateObj.getMinutes()).padStart(2, '0');
-      return `${d}, ${dayNum} ${m} ${y} ${hh}:${mm} ${tz}`;
+    function setBackgroundImage(img) {
+      state.bgImage = img;
+      state.canvasWidth = img.naturalWidth || img.width;
+      state.canvasHeight = img.naturalHeight || img.height;
+      canvas.width = state.canvasWidth;
+      canvas.height = state.canvasHeight;
+      origCanvas.width = state.canvasWidth;
+      origCanvas.height = state.canvasHeight;
+      origCtx.drawImage(img, 0, 0, state.canvasWidth, state.canvasHeight);
+
+      document.getElementById('canvasDimLabel').textContent = `Resolusi: ${state.canvasWidth} × ${state.canvasHeight} px`;
+      renderCanvas();
     }
 
-    // ==========================================
-    // 5. LEAFLET INTERACTIVE SATELLITE MAP
-    // ==========================================
+    // Leaflet Satellite Map Setup
     let leafletMap = null;
-    let mapMarker = null;
-
     function initLeafletMap() {
-      leafletMap = L.map('leafletMap', {
-        center: [state.lat, state.lng],
-        zoom: 17,
+      const lat = parseFloat(document.getElementById('inpLat').value) || -8.684020;
+      const lng = parseFloat(document.getElementById('inpLng').value) || 116.137824;
+      const zoom = parseInt(document.getElementById('inpMapZoom').value) || 17;
+
+      leafletMap = L.map('leafletMapContainer', {
+        center: [lat, lng],
+        zoom: zoom,
         zoomControl: false,
         attributionControl: false
       });
 
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        crossOrigin: true,
+        crossOrigin: 'anonymous',
         maxZoom: 19
       }).addTo(leafletMap);
 
-      const pinIcon = L.divIcon({
-        className: 'custom-pin',
-        html: `<div style="width:18px;height:18px;background:#2563eb;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
-      });
-
-      mapMarker = L.marker([state.lat, state.lng], { icon: pinIcon }).addTo(leafletMap);
-
-      leafletMap.on('click', async (e) => {
-        const { lat, lng } = e.latlng;
-        updateLocationCoordinates(lat, lng, true);
-      });
-
-      leafletMap.on('moveend', () => {
-        renderSatelliteMiniMapToOffscreen();
-      });
-
-      setTimeout(renderSatelliteMiniMapToOffscreen, 800);
+      setTimeout(captureMapSnapshot, 1200);
     }
 
-    async function renderSatelliteMiniMapToOffscreen() {
-      if (state.customMapImage || !state.enableMap) {
+    function captureMapSnapshot() {
+      if (!leafletMap) return;
+      const lat = parseFloat(document.getElementById('inpLat').value) || -8.684020;
+      const lng = parseFloat(document.getElementById('inpLng').value) || 116.137824;
+      const zoom = parseInt(document.getElementById('inpMapZoom').value) || 17;
+      leafletMap.setView([lat, lng], zoom, { animate: false });
+
+      setTimeout(() => {
+        const mapEl = document.getElementById('leafletMapContainer');
+        const tiles = mapEl.querySelectorAll('img.leaflet-tile');
+        const snap = document.createElement('canvas');
+        snap.width = 240; snap.height = 240;
+        const sctx = snap.getContext('2d');
+
+        sctx.fillStyle = '#1e293b';
+        sctx.fillRect(0, 0, 240, 240);
+
+        const mapRect = mapEl.getBoundingClientRect();
+        tiles.forEach(tile => {
+          if (tile.complete && tile.naturalWidth > 0) {
+            const rect = tile.getBoundingClientRect();
+            const dx = rect.left - mapRect.left;
+            const dy = rect.top - mapRect.top;
+            try {
+              sctx.drawImage(tile, dx, dy, rect.width, rect.height);
+            } catch (e) {}
+          }
+        });
+
+        state.mapCanvas = snap;
         renderCanvas();
+      }, 900);
+    }
+
+    // =========================================================================
+    // STRATEGI 1 + 2 + 4: GLYPH-LEVEL MASKING + DIRECTIONAL TEXTURE INPAINTING
+    // =========================================================================
+
+    /**
+     * Strategi 1: Glyph-Level Masking
+     * Mendeteksi hanya piksel huruf putih terang beserta halo bayangan tipisnya,
+     * membiarkan 70-80% tekstur foto di antara dan di dalam sela huruf 100% utuh.
+     */
+    function buildGlyphMask(data, w, h, sensitivityOffset, haloRadius) {
+      const total = w * h;
+      const lum = new Float32Array(total);
+      const sat = new Float32Array(total);
+
+      // Hitung luminansi & saturasi setiap piksel dalam kotak
+      const hist = new Uint32Array(256);
+      for (let i = 0; i < total; i++) {
+        const idx = i * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+        const maxC = Math.max(r, g, b);
+        const minC = Math.min(r, g, b);
+        const l = 0.299 * r + 0.587 * g + 0.114 * b;
+        lum[i] = l;
+        sat[i] = maxC > 0 ? (maxC - minC) / maxC : 0;
+        hist[Math.min(255, Math.max(0, Math.round(l)))]++;
+      }
+
+      // Hitung Otsu Threshold otomatis untuk memisahkan piksel huruf terang dari latar foto
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0, wB = 0, wF = 0, maxVar = 0, otsuThresh = 195;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const varBetween = wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > maxVar) {
+          maxVar = varBetween;
+          otsuThresh = t;
+        }
+      }
+
+      // Batasi threshold agar tetap fokus pada huruf terang Timemark, disesuaikan dengan slider sensitivitas
+      const baseThresh = Math.max(155, Math.min(235, otsuThresh)) - sensitivityOffset;
+
+      // Tahap A: Tandai inti huruf (bright & low saturation pixels)
+      const coreMask = new Uint8Array(total);
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const i = y * w + x;
+          // Piksel huruf putih Timemark memiliki luminansi tinggi & saturasi rendah
+          if (lum[i] >= baseThresh && sat[i] < 0.35) {
+            coreMask[i] = 1;
+          }
+        }
+      }
+
+      // Tahap B: Dilasi tipis untuk mencakup anti-aliasing huruf dan drop shadow gelap tepat di sebelah huruf
+      const finalMask = new Uint8Array(total);
+      const rHalo = Math.max(1, Math.min(4, haloRadius));
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (coreMask[i] === 1) {
+            finalMask[i] = 1;
+            continue;
+          }
+          // Periksa apakah bertetangga dengan inti huruf dalam jarak rHalo
+          let nearCore = false;
+          let minDist = 99;
+          for (let dy = -rHalo; dy <= rHalo; dy++) {
+            const ny = y + dy;
+            if (ny < 0 || ny >= h) continue;
+            for (let dx = -rHalo; dx <= rHalo; dx++) {
+              const nx = x + dx;
+              if (nx < 0 || nx >= w) continue;
+              if (coreMask[ny * w + nx] === 1) {
+                const dist = Math.hypot(dx, dy);
+                if (dist <= rHalo + 0.35) {
+                  nearCore = true;
+                  if (dist < minDist) minDist = dist;
+                }
+              }
+            }
+          }
+          if (nearCore) {
+            // Ikutkan anti-alias tepi huruf (jarak <= 1.5) atau piksel bayangan gelap di sekitar huruf
+            if (minDist <= 1.5 || lum[i] < baseThresh - 35) {
+              finalMask[i] = 1;
+            }
+          }
+        }
+      }
+
+      return finalMask;
+    }
+
+    /**
+     * Strategi 2: Directional Texture Inpainting + Micro-Grain Matching
+     * Merambatkan piksel bersih di sekitar huruf mengikuti kontur tekstur lokal
+     * serta menambahkan micro-grain sensor kamera agar latar tetap tajam & menyatu.
+     */
+    function inpaintGlyphs(box) {
+      const pad = 4;
+      const rx = Math.max(0, Math.round(box.x - pad));
+      const ry = Math.max(0, Math.round(box.y - pad));
+      const rw = Math.min(state.canvasWidth - rx, Math.round(box.w + pad * 2));
+      const rh = Math.min(state.canvasHeight - ry, Math.round(box.h + pad * 2));
+      if (rw <= 4 || rh <= 4) return;
+
+      // Ambil piksel asli murni dari origCtx
+      const imgData = origCtx.getImageData(rx, ry, rw, rh);
+      const data = imgData.data;
+      const total = rw * rh;
+
+      const mask = buildGlyphMask(data, rw, rh, state.glyphSensitivity, state.haloRadius);
+
+      // Jika mode preview masker aktif, tampilkan highlight merah tipis pada piksel huruf yang terdeteksi
+      if (state.showGlyphMaskPreview) {
+        for (let i = 0; i < total; i++) {
+          if (mask[i] === 1) {
+            const idx = i * 4;
+            data[idx] = Math.min(255, data[idx] * 0.4 + 220);
+            data[idx + 1] = data[idx + 1] * 0.3;
+            data[idx + 2] = data[idx + 2] * 0.3 + 60;
+          }
+        }
+        ctx.putImageData(imgData, rx, ry);
         return;
       }
 
-      const size = 320;
-      mapOffscreenCanvas.width = size;
-      mapOffscreenCanvas.height = size;
-      const zoom = parseInt(document.getElementById('inpMapZoom').value, 10) || 17;
-
-      const latRad = state.lat * Math.PI / 180;
-      const n = Math.pow(2, zoom);
-      const xTileFloat = (state.lng + 180) / 360 * n;
-      const yTileFloat = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-
-      const centerTileX = Math.floor(xTileFloat);
-      const centerTileY = Math.floor(yTileFloat);
-      const offsetX = (xTileFloat - centerTileX) * 256;
-      const offsetY = (yTileFloat - centerTileY) * 256;
-
-      mapOffCtx.fillStyle = '#1e293b';
-      mapOffCtx.fillRect(0, 0, size, size);
-
-      const tilePromises = [];
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const tx = centerTileX + dx;
-          const ty = centerTileY + dy;
-          const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
-          const drawX = (size / 2) - offsetX + (dx * 256);
-          const drawY = (size / 2) - offsetY + (dy * 256);
-
-          tilePromises.push(
-            loadImageFromURL(url)
-              .then(img => {
-                mapOffCtx.drawImage(img, drawX, drawY, 256, 256);
-              })
-              .catch(() => {})
-          );
-        }
-      }
-
-      await Promise.all(tilePromises);
-
-      const cx = size / 2;
-      const cy = size / 2;
-      const rad = (state.compassAngle - 90) * Math.PI / 180;
-      const spread = 32 * Math.PI / 180;
-
-      mapOffCtx.save();
-      const grad = mapOffCtx.createRadialGradient(cx, cy, 4, cx, cy, 95);
-      grad.addColorStop(0, 'rgba(34, 197, 94, 0.85)');
-      grad.addColorStop(1, 'rgba(34, 197, 94, 0.05)');
-      mapOffCtx.fillStyle = grad;
-      mapOffCtx.beginPath();
-      mapOffCtx.moveTo(cx, cy);
-      mapOffCtx.arc(cx, cy, 95, rad - spread, rad + spread);
-      mapOffCtx.closePath();
-      mapOffCtx.fill();
-      mapOffCtx.restore();
-
-      mapOffCtx.save();
-      mapOffCtx.shadowColor = 'rgba(0,0,0,0.55)';
-      mapOffCtx.shadowBlur = 8;
-      mapOffCtx.beginPath();
-      mapOffCtx.arc(cx, cy - 10, 13, Math.PI * 0.8, Math.PI * 2.2);
-      mapOffCtx.lineTo(cx, cy + 8);
-      mapOffCtx.closePath();
-      mapOffCtx.fillStyle = '#2563eb';
-      mapOffCtx.fill();
-      mapOffCtx.lineWidth = 2.5;
-      mapOffCtx.strokeStyle = '#ffffff';
-      mapOffCtx.stroke();
-
-      mapOffCtx.beginPath();
-      mapOffCtx.arc(cx, cy - 10, 4.5, 0, Math.PI * 2);
-      mapOffCtx.fillStyle = '#ffffff';
-      mapOffCtx.fill();
-      mapOffCtx.restore();
-
-      mapOffCtx.save();
-      mapOffCtx.font = 'bold 20px Inter, sans-serif';
-      mapOffCtx.fillStyle = 'rgba(255,255,255,0.9)';
-      mapOffCtx.shadowColor = 'rgba(0,0,0,0.8)';
-      mapOffCtx.shadowBlur = 4;
-      mapOffCtx.fillText('Google', 12, size - 12);
-      mapOffCtx.restore();
-
-      state.mapSnapshot = mapOffscreenCanvas;
-      renderCanvas();
-    }
-
-    async function updateLocationCoordinates(lat, lng, fetchAddress = false) {
-      state.lat = parseFloat(lat.toFixed(6));
-      state.lng = parseFloat(lng.toFixed(6));
-      state.coordText = formatLatLngDisplay(state.lat, state.lng);
-
-      document.getElementById('inpLat').value = state.lat;
-      document.getElementById('inpLng').value = state.lng;
-      document.getElementById('inpCoordText').value = state.coordText;
-
-      if (leafletMap && mapMarker) {
-        leafletMap.setView([state.lat, state.lng], leafletMap.getZoom());
-        mapMarker.setLatLng([state.lat, state.lng]);
-      }
-
-      renderSatelliteMiniMapToOffscreen();
-
-      if (fetchAddress) {
-        try {
-          const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${state.lat}&lon=${state.lng}&accept-language=id`);
-          const data = await resp.json();
-          if (data && data.display_name) {
-            state.address = data.display_name;
-            document.getElementById('inpAddress').value = state.address;
-            renderCanvas();
-            showToast('Alamat diperbarui dari koordinat peta', 'success');
+      // Hitung tingkat sensor noise / grain alami dari piksel bersih (mask === 0)
+      let noiseSum = 0, noiseCount = 0;
+      for (let y = 1; y < rh - 1; y++) {
+        for (let x = 1; x < rw - 1; x++) {
+          const i = y * rw + x;
+          if (mask[i] === 0 && mask[i - 1] === 0 && mask[i + 1] === 0) {
+            const idx = i * 4;
+            const avgNeighbor = (data[(i - 1) * 4] + data[(i + 1) * 4]) * 0.5;
+            noiseSum += Math.abs(data[idx] - avgNeighbor);
+            noiseCount++;
           }
-        } catch (err) {
-          console.warn('Reverse geocode failed:', err);
+        }
+      }
+      const sensorGrain = noiseCount > 0 ? Math.min(10, (noiseSum / noiseCount) * state.grainStrength) : 2.0;
+
+      // Salin buffer untuk propagasi tekstur berarah (Directional Fast Marching Diffusion)
+      const work = new Float32Array(total * 3);
+      const known = new Uint8Array(total);
+      for (let i = 0; i < total; i++) {
+        work[i * 3] = data[i * 4];
+        work[i * 3 + 1] = data[i * 4 + 1];
+        work[i * 3 + 2] = data[i * 4 + 2];
+        known[i] = mask[i] === 0 ? 1 : 0;
+      }
+
+      // 8 arah sampel dengan bobot arah kontur lokal
+      const dirs = [
+        { dx: 0, dy: -1, w: 1.2 }, // atas
+        { dx: 0, dy: 1, w: 1.2 },  // bawah
+        { dx: -1, dy: 0, w: 1.0 }, // kiri
+        { dx: 1, dy: 0, w: 1.0 },  // kanan
+        { dx: -1, dy: -1, w: 0.75 },
+        { dx: 1, dy: -1, w: 0.75 },
+        { dx: -1, dy: 1, w: 0.75 },
+        { dx: 1, dy: 1, w: 0.75 }
+      ];
+
+      // Propagasi bertahap dari batas luar huruf masuk ke inti huruf
+      let remaining = 1;
+      let iter = 0;
+      while (remaining > 0 && iter < 45) {
+        remaining = 0;
+        const updates = [];
+
+        for (let y = 0; y < rh; y++) {
+          for (let x = 0; x < rw; x++) {
+            const i = y * rw + x;
+            if (known[i] === 1) continue;
+
+            // Estimasi arah gradien lokal dari piksel bersih sekitar agar garis tekstur menyambung
+            let gx = 0, gy = 0;
+            if (x > 0 && x < rw - 1 && known[i - 1] && known[i + 1]) {
+              gx = Math.abs(work[(i + 1) * 3] - work[(i - 1) * 3]);
+            }
+            if (y > 0 && y < rh - 1 && known[i - rw] && known[i + rw]) {
+              gy = Math.abs(work[(i + rw) * 3] - work[(i - rw) * 3]);
+            }
+
+            let sumR = 0, sumG = 0, sumB = 0, sumW = 0;
+            for (let d = 0; d < dirs.length; d++) {
+              const nx = x + dirs[d].dx;
+              const ny = y + dirs[d].dy;
+              if (nx < 0 || nx >= rw || ny < 0 || ny >= rh) continue;
+              const ni = ny * rw + nx;
+              if (known[ni] === 1) {
+                // Bobot lebih tinggi sejajar isophote (tegak lurus gradien) agar garis lipatan/kayu tetap tajam
+                let dirWeight = dirs[d].w;
+                if (gx > gy + 8 && dirs[d].dx === 0) dirWeight *= 1.8; // tekstur vertikal
+                if (gy > gx + 8 && dirs[d].dy === 0) dirWeight *= 1.8; // tekstur horizontal
+
+                sumR += work[ni * 3] * dirWeight;
+                sumG += work[ni * 3 + 1] * dirWeight;
+                sumB += work[ni * 3 + 2] * dirWeight;
+                sumW += dirWeight;
+              }
+            }
+
+            if (sumW > 0) {
+              updates.push({ i, r: sumR / sumW, g: sumG / sumW, b: sumB / sumW });
+            } else {
+              remaining++;
+            }
+          }
+        }
+
+        if (updates.length === 0) break;
+        for (let u = 0; u < updates.length; u++) {
+          const item = updates[u];
+          work[item.i * 3] = item.r;
+          work[item.i * 3 + 1] = item.g;
+          work[item.i * 3 + 2] = item.b;
+          known[item.i] = 1;
+        }
+        iter++;
+      }
+
+      // Tulis kembali HANYA piksel yang masuk dalam mask (piksel luar mask dibiarkan 100% original)
+      for (let i = 0; i < total; i++) {
+        if (mask[i] === 1) {
+          const idx = i * 4;
+          // Tambahkan micro-grain halus sesuai karakteristik sensor kamera
+          const grain = (Math.random() - 0.5) * sensorGrain * 1.4;
+          data[idx] = Math.min(255, Math.max(0, Math.round(work[i * 3] + grain)));
+          data[idx + 1] = Math.min(255, Math.max(0, Math.round(work[i * 3 + 1] + grain)));
+          data[idx + 2] = Math.min(255, Math.max(0, Math.round(work[i * 3 + 2] + grain)));
+        }
+      }
+
+      ctx.putImageData(imgData, rx, ry);
+    }
+
+    /**
+     * Strategi 4: Replikasi Tipografi & Drop Shadow Identik Timemark
+     */
+    function renderMatchedText(box) {
+      ctx.save();
+      const shadowAlpha = (box.shadowStrength ?? 75) / 100;
+      const fSize = box.fontSize || Math.round(box.h * 0.76);
+      const weight = box.weight || '500';
+
+      ctx.font = `${weight} ${fSize}px "Roboto", sans-serif`;
+      ctx.textBaseline = 'middle';
+
+      // Drop shadow khas Timemark agar menyatu dengan baris atas/bawahnya
+      if (shadowAlpha > 0.02) {
+        ctx.shadowColor = `rgba(0, 0, 0, ${Math.min(0.85, shadowAlpha * 0.9)})`;
+        ctx.shadowBlur = Math.max(2, fSize * 0.11);
+        ctx.shadowOffsetX = Math.max(1, fSize * 0.035);
+        ctx.shadowOffsetY = Math.max(1, fSize * 0.045);
+      }
+
+      ctx.fillStyle = box.color || '#ffffff';
+      ctx.globalAlpha = 0.97; // sedikit menyatu dengan sensor foto
+      const textY = box.y + box.h / 2 + (box.offsetY || 0);
+      ctx.fillText(box.text, box.x + 2, textY);
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // MAIN CANVAS RENDERER
+    // =========================================================================
+    function renderCanvas() {
+      const W = state.canvasWidth;
+      const H = state.canvasHeight;
+      ctx.clearRect(0, 0, W, H);
+
+      // 1. Gambar foto asli murni sebagai dasar
+      if (state.bgImage) {
+        ctx.drawImage(origCanvas, 0, 0, W, H);
+      } else {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // 2. Terapkan Glyph-Level Inpainting & Render Teks Baru untuk setiap kotak OCR yang diedit
+      state.ocrBoxes.forEach(box => {
+        if (box.edited || state.showGlyphMaskPreview) {
+          inpaintGlyphs(box);
+          if (box.edited) {
+            renderMatchedText(box);
+          }
+        }
+      });
+
+      // 3. Render elemen overlay hanya jika sakelarnya AKTIF
+      const baseScale = (W / 1200) * state.overlayScale;
+
+      if (state.layers.badge) drawRegionBadge(W, H, baseScale);
+      if (state.layers.map) drawMiniMap(W, H, baseScale);
+      if (state.layers.mainLogo || state.layers.textBlock) drawGeotagBlock(W, H, baseScale);
+      if (state.layers.rightWatermark) drawRightVerticalWatermark(W, H, baseScale);
+      if (state.layers.footer) drawFooterBar(W, H, baseScale);
+
+      // 4. Kotak panduan seleksi OCR (hanya tampil di editor saat garis bantu aktif)
+      if (state.showOcrGuides && !state._isExporting) {
+        state.ocrBoxes.forEach(box => {
+          const isSelected = box.id === state.selectedOcrId;
+          ctx.save();
+          ctx.strokeStyle = isSelected ? '#38bdf8' : (box.edited ? '#10b981' : 'rgba(250, 204, 21, 0.85)');
+          ctx.lineWidth = isSelected ? Math.max(3, W * 0.003) : Math.max(1.5, W * 0.0018);
+          ctx.setLineDash(isSelected ? [] : [8, 5]);
+          ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+          if (isSelected) {
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.10)';
+            ctx.fillRect(box.x, box.y, box.w, box.h);
+          }
+          ctx.restore();
+        });
+
+        if (state.isDrawingManualBox && state.manualBoxStart && state.manualBoxCurrent) {
+          const rx = Math.min(state.manualBoxStart.x, state.manualBoxCurrent.x);
+          const ry = Math.min(state.manualBoxStart.y, state.manualBoxCurrent.y);
+          const rw = Math.abs(state.manualBoxCurrent.x - state.manualBoxStart.x);
+          const rh = Math.abs(state.manualBoxCurrent.y - state.manualBoxStart.y);
+          ctx.save();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3;
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+          ctx.fillRect(rx, ry, rw, rh);
+          ctx.strokeRect(rx, ry, rw, rh);
+          ctx.restore();
         }
       }
     }
 
-    // ==========================================
-    // 6. SAMPLE PHOTO GENERATOR
-    // ==========================================
-    function generateDemoSampleImage() {
-      const w = 1200;
-      const h = 1600;
-      const off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      const octx = off.getContext('2d');
+    function drawRegionBadge(W, H, s) {
+      const code = document.getElementById('inpRegionCode').value || '5201';
+      const x = state.positions.badge.x * W;
+      const y = state.positions.badge.y * H;
+      const bw = 135 * s;
+      const bh = 62 * s;
+      const r = 10 * s;
 
-      const bgGrad = octx.createLinearGradient(0, 0, w, h);
-      bgGrad.addColorStop(0, '#475569');
-      bgGrad.addColorStop(0.45, '#64748b');
-      bgGrad.addColorStop(1, '#334155');
-      octx.fillStyle = bgGrad;
-      octx.fillRect(0, 0, w, h);
+      ctx.save();
+      ctx.fillStyle = '#e56db1';
+      roundRect(ctx, x, y, bw, bh, r);
+      ctx.fill();
 
-      octx.fillStyle = '#78350f';
-      octx.fillRect(0, 0, w, 140);
-      octx.fillStyle = '#fef3c7';
-      octx.fillRect(360, 140, 840, 1100);
-
-      octx.fillStyle = '#15803d';
-      octx.fillRect(620, 140, 580, 920);
-
-      octx.fillStyle = '#d6d3d1';
-      octx.beginPath();
-      octx.ellipse(540, 1380, 420, 360, 0, Math.PI, Math.PI * 2);
-      octx.fill();
-
-      octx.fillStyle = '#fed7aa';
-      octx.beginPath();
-      octx.ellipse(520, 740, 175, 220, 0, 0, Math.PI * 2);
-      octx.fill();
-
-      octx.fillStyle = '#1e293b';
-      octx.beginPath();
-      octx.ellipse(520, 580, 180, 110, 0, Math.PI, Math.PI * 2);
-      octx.fill();
-
-      octx.fillStyle = 'rgba(255,255,255,0.22)';
-      octx.font = '600 28px Inter, sans-serif';
-      octx.textAlign = 'center';
-      octx.fillText('FOTO CONTOH DOKUMENTASI LAPANGAN BPS', w / 2, 340);
-
-      return loadImageFromURL(off.toDataURL('image/jpeg', 0.92));
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 ${Math.round(31 * s)}px "Roboto", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(code, x + bw / 2, y + bh / 2 + 2 * s);
+      ctx.restore();
+      state._boundsBadge = { x, y, w: bw, h: bh };
     }
 
-    // ==========================================
-    // 7. IN-PLACE OCR PATCHING & MAIN CANVAS RENDERING
-    // ==========================================
-    function wrapTextLines(context, text, maxWidth) {
+    function drawMiniMap(W, H, s) {
+      const x = state.positions.map.x * W;
+      const y = state.positions.map.y * H;
+      const size = 230 * s;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 10 * s;
+      ctx.shadowOffsetY = 3 * s;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x - 3 * s, y - 3 * s, size + 6 * s, size + 6 * s);
+      ctx.shadowColor = 'transparent';
+
+      ctx.beginPath();
+      ctx.rect(x, y, size, size);
+      ctx.clip();
+
+      if (state.mapCanvas) {
+        ctx.drawImage(state.mapCanvas, x, y, size, size);
+      } else {
+        ctx.fillStyle = '#263829';
+        ctx.fillRect(x, y, size, size);
+      }
+
+      const deg = parseFloat(document.getElementById('inpCompassDeg').value) || 0;
+      const rad = ((deg - 90) * Math.PI) / 180;
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rad);
+      const coneGrad = ctx.createRadialGradient(0, 0, 4 * s, 0, 0, 75 * s);
+      coneGrad.addColorStop(0, 'rgba(34, 197, 94, 0.85)');
+      coneGrad.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
+      ctx.fillStyle = coneGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 75 * s, -0.45, 0.45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = '#0ea5e9';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 2.5 * s;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 ${Math.round(18 * s)}px "Roboto", sans-serif`;
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 4 * s;
+      ctx.fillText('Google', x + 10 * s, y + size - 10 * s);
+      ctx.restore();
+
+      state._boundsMap = { x, y, w: size, h: size };
+    }
+
+    function drawGeotagBlock(W, H, s) {
+      const x = state.positions.textBlock.x * W;
+      let y = state.positions.textBlock.y * H;
+
+      ctx.save();
+      const startY = y;
+
+      if (state.layers.mainLogo && state.logoImage) {
+        const logoH = 95 * s;
+        const ratio = (state.logoImage.naturalWidth || 220) / (state.logoImage.naturalHeight || 175);
+        const logoW = logoH * ratio;
+        ctx.drawImage(state.logoImage, x, y, logoW, logoH);
+        y += logoH + 14 * s;
+      }
+
+      if (state.layers.textBlock) {
+        const title = document.getElementById('inpTitle').value;
+        const dateStr = formatTimemarkDate(
+          document.getElementById('inpDate').value,
+          document.getElementById('inpTime').value,
+          document.getElementById('inpTimezone').value
+        );
+        const address = document.getElementById('inpAddress').value;
+        const lat = parseFloat(document.getElementById('inpLat').value) || 0;
+        const lng = parseFloat(document.getElementById('inpLng').value) || 0;
+        const alt = document.getElementById('inpAltitude').value;
+        const deg = parseInt(document.getElementById('inpCompassDeg').value) || 0;
+        const dir = degToCompass(deg);
+        const photoCode = document.getElementById('inpPhotoCode').value;
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.72)';
+        ctx.shadowBlur = 5 * s;
+        ctx.shadowOffsetX = 1.5 * s;
+        ctx.shadowOffsetY = 1.5 * s;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `700 ${Math.round(36 * s)}px "Roboto", sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(title, x, y);
+        y += 48 * s;
+
+        const bodyStartY = y;
+        const textX = x + 16 * s;
+        const lineHeight = 38 * s;
+        const maxTextW = W * 0.65;
+
+        ctx.font = `500 ${Math.round(28 * s)}px "Roboto", sans-serif`;
+        ctx.fillText(dateStr, textX, y);
+        y += lineHeight + 6 * s;
+
+        const addrLines = wrapText(ctx, address, maxTextW);
+        addrLines.forEach(line => {
+          ctx.fillText(line, textX, y);
+          y += lineHeight;
+        });
+        y += 6 * s;
+
+        const latDir = lat < 0 ? 'S' : 'N';
+        const lngDir = lng < 0 ? 'W' : 'E';
+        ctx.fillText(`${Math.abs(lat).toFixed(6)}°${latDir}, ${Math.abs(lng).toFixed(6)}°${lngDir}`, textX, y);
+        y += lineHeight + 6 * s;
+
+        ctx.fillText(`Altitude ${alt}`, textX, y);
+        y += lineHeight + 6 * s;
+
+        ctx.fillText(`Compass ${deg}° ${dir}`, textX, y);
+        const bodyEndY = y + 30 * s;
+
+        ctx.save();
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(x + 2 * s, bodyStartY + 2 * s, 4.5 * s, bodyEndY - bodyStartY);
+        ctx.restore();
+
+        y = bodyEndY + 14 * s;
+        ctx.font = `500 ${Math.round(24 * s)}px "Roboto", sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText(`✓ Photo Code: ${photoCode}`, x + 4 * s, y);
+        y += 32 * s;
+      }
+
+      ctx.restore();
+      state._boundsText = { x, y: startY, w: W * 0.65, h: Math.max(80 * s, y - startY) };
+    }
+
+    function drawRightVerticalWatermark(W, H, s) {
+      const photoCode = document.getElementById('inpPhotoCode').value;
+      ctx.save();
+      ctx.translate(W - 18 * s, H * 0.52);
+      ctx.rotate(-Math.PI / 2);
+      ctx.font = `600 ${Math.round(16 * s)}px "Roboto", sans-serif`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.shadowColor = 'rgba(0,0,0,0.7)';
+      ctx.shadowBlur = 3 * s;
+      ctx.fillText(`✓ ${photoCode}   Timemark Verified`, 0, 0);
+      ctx.restore();
+    }
+
+    function drawFooterBar(W, H, s) {
+      const footerH = 128 * s;
+      const fy = H - footerH;
+      const staffName = document.getElementById('inpStaffName').value;
+      const staffRole = document.getElementById('inpStaffRole').value;
+
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, fy, W, footerH);
+
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 2 * s;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.68, fy);
+      ctx.lineTo(W * 0.62, H);
+      ctx.stroke();
+
+      const avR = 38 * s;
+      const avX = 56 * s;
+      const avY = fy + footerH / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avX, avY, avR, 0, Math.PI * 2);
+      ctx.clip();
+      if (state.avatarImage) {
+        ctx.drawImage(state.avatarImage, avX - avR, avY - avR, avR * 2, avR * 2);
+      } else {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(avX - avR, avY - avR, avR * 2, avR * 2);
+      }
+      ctx.restore();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = `700 ${Math.round(28 * s)}px "Roboto", sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(staffName, avX + avR + 22 * s, avY - 14 * s);
+
+      ctx.fillStyle = '#475569';
+      ctx.font = `400 ${Math.round(22 * s)}px "Roboto", sans-serif`;
+      ctx.fillText(staffRole, avX + avR + 22 * s, avY + 18 * s);
+
+      if (state.logoImage) {
+        const lh = 72 * s;
+        const ratio = (state.logoImage.naturalWidth || 220) / (state.logoImage.naturalHeight || 175);
+        const lw = lh * ratio;
+        ctx.drawImage(state.logoImage, W - lw - 42 * s, fy + (footerH - lh) / 2, lw, lh);
+      }
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function wrapText(ctx, text, maxWidth) {
       const words = text.split(/\s+/);
       const lines = [];
-      let currentLine = '';
-
-      for (let i = 0; i < words.length; i++) {
-        const testLine = currentLine ? `${currentLine} ${words[i]}` : words[i];
-        const metrics = context.measureText(testLine);
-        if (metrics.width > maxWidth && currentLine) {
-          lines.push(currentLine);
-          currentLine = words[i];
+      let current = '';
+      words.forEach(word => {
+        const test = current ? `${current} ${word}` : word;
+        if (ctx.measureText(test).width > maxWidth && current) {
+          lines.push(current);
+          current = word;
         } else {
-          currentLine = testLine;
+          current = test;
         }
-      }
-      if (currentLine) lines.push(currentLine);
+      });
+      if (current) lines.push(current);
       return lines;
     }
 
-    function drawRoundedRect(context, x, y, width, height, radius) {
-      context.beginPath();
-      context.moveTo(x + radius, y);
-      context.lineTo(x + width - radius, y);
-      context.quadraticCurveTo(x + width, y, x + width, y + radius);
-      context.lineTo(x + width, y + height - radius);
-      context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      context.lineTo(x + radius, y + height);
-      context.quadraticCurveTo(x, y + height, x, y + height - radius);
-      context.lineTo(x, y + radius);
-      context.quadraticCurveTo(x, y, x + radius, y);
-      context.closePath();
+    function formatTimemarkDate(dateVal, timeVal, tz) {
+      if (!dateVal) return `Mon, 16 Nov 2026 ${timeVal || '08:00'} ${tz}`;
+      const [y, m, d] = dateVal.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[dt.getDay()]}, ${String(d).padStart(2, '0')} ${months[m - 1]} ${y} ${timeVal || '08:00'} ${tz}`;
     }
 
-    // Smart local background reconstruction for edited OCR bounding boxes
-    function renderInPlaceOcrEdits(targetCtx, W, H) {
-      if (!state.ocrBoxes.length) return;
+    function degToCompass(num) {
+      const val = Math.floor((num / 22.5) + 0.5);
+      const arr = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      return arr[(val % 16)];
+    }
 
-      for (const box of state.ocrBoxes) {
-        const { x0, y0, x1, y1 } = box.bbox;
-        const bw = Math.max(10, x1 - x0);
-        const bh = Math.max(10, y1 - y0);
-        const pad = Math.max(4, Math.round(bh * 0.16));
+    // =========================================================================
+    // OCR SCANNER & IN-PLACE LINE EDITOR
+    // =========================================================================
+    document.getElementById('btnRunOCR').addEventListener('click', async () => {
+      if (!state.bgImage) return alert('Silakan upload foto terlebih dahulu.');
+      const statusBox = document.getElementById('ocrStatusBox');
+      const statusText = document.getElementById('ocrStatusText');
+      const percentText = document.getElementById('ocrPercent');
+      const bar = document.getElementById('ocrProgressBar');
 
-        const rx = Math.max(0, x0 - pad);
-        const ry = Math.max(0, y0 - pad);
-        const rw = Math.min(W - rx, bw + pad * 2);
-        const rh = Math.min(H - ry, bh + pad * 2);
+      statusBox.classList.remove('hidden');
+      statusText.textContent = 'Mengenali baris teks...';
+      bar.style.width = '10%';
 
-        // Only erase & re-draw if user actually edited this box's text
-        if (box.edited) {
-          targetCtx.save();
-
-          // 1. Sample surrounding top & bottom strips to stretch-fill the old text area naturally
-          const stripH = Math.max(3, Math.min(8, Math.round(bh * 0.22)));
-          const topSampleY = Math.max(0, ry - stripH);
-          const botSampleY = Math.min(H - stripH, ry + rh);
-
-          // Draw top & bottom background texture stretched across box
-          targetCtx.drawImage(state.baseImage, rx, topSampleY, rw, stripH, rx, ry, rw, rh * 0.55);
-          targetCtx.drawImage(state.baseImage, rx, botSampleY, rw, stripH, rx, ry + rh * 0.45, rw, rh * 0.55);
-
-          // 2. Smooth blend with Gaussian blur over the patched region
-          targetCtx.beginPath();
-          drawRoundedRect(targetCtx, rx, ry, rw, rh, 4);
-          targetCtx.clip();
-          targetCtx.filter = `blur(${box.blurRadius || 14}px)`;
-          targetCtx.drawImage(canvas, rx - 10, ry - 10, rw + 20, rh + 20, rx - 10, ry - 10, rw + 20, rh + 20);
-          targetCtx.filter = 'none';
-
-          // 3. Render replacement text precisely at original bbox position with Timemark drop-shadow
-          targetCtx.shadowColor = 'rgba(0, 0, 0, 0.78)';
-          targetCtx.shadowBlur = Math.max(4, box.fontSize * 0.22);
-          targetCtx.shadowOffsetX = 1;
-          targetCtx.shadowOffsetY = 1.5;
-          targetCtx.fillStyle = box.color || '#ffffff';
-          targetCtx.font = `${box.fontWeight || '500'} ${box.fontSize}px Inter, Roboto, sans-serif`;
-          targetCtx.textBaseline = 'middle';
-          targetCtx.textAlign = 'left';
-          targetCtx.fillText(box.text, x0, y0 + bh / 2);
-
-          targetCtx.restore();
-        }
-
-        // Draw interactive selection outline ONLY on screen (never in downloaded file)
-        if (!state.isExporting && state.showOcrGuides) {
-          const isSelected = box.id === state.selectedOcrId;
-          targetCtx.save();
-          targetCtx.strokeStyle = isSelected ? '#38bdf8' : (box.edited ? '#34d399' : 'rgba(251, 191, 36, 0.85)');
-          targetCtx.lineWidth = isSelected ? 3 : 2;
-          targetCtx.setLineDash(isSelected ? [] : [6, 4]);
-          drawRoundedRect(targetCtx, rx, ry, rw, rh, 4);
-          targetCtx.stroke();
-
-          if (isSelected) {
-            targetCtx.fillStyle = 'rgba(56, 189, 248, 0.14)';
-            targetCtx.fill();
+      try {
+        const result = await Tesseract.recognize(origCanvas.toDataURL('image/png'), 'eng+ind', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const p = Math.round(m.progress * 100);
+              bar.style.width = `${p}%`;
+              percentText.textContent = `${p}%`;
+            }
           }
-          targetCtx.restore();
-        }
+        });
+
+        const lines = result.data.lines || [];
+        const detected = [];
+        lines.forEach((line, idx) => {
+          const clean = line.text.trim().replace(/\n/g, ' ');
+          if (clean.length >= 2 && line.confidence > 35) {
+            const b = line.bbox;
+            const h = b.y1 - b.y0;
+            detected.push({
+              id: 'ocr-' + Date.now() + '-' + idx,
+              originalText: clean,
+              text: clean,
+              x: Math.max(0, b.x0 - 4),
+              y: Math.max(0, b.y0 - 3),
+              w: Math.min(state.canvasWidth - b.x0, (b.x1 - b.x0) + 10),
+              h: h + 6,
+              fontSize: Math.max(12, Math.round(h * 0.78)),
+              color: '#ffffff',
+              weight: '500',
+              shadowStrength: 75,
+              offsetY: 0,
+              edited: false
+            });
+          }
+        });
+
+        state.ocrBoxes = detected;
+        state.showOcrGuides = true;
+        document.getElementById('showOcrGuides').checked = true;
+        statusText.textContent = `Selesai! ${detected.length} baris teks siap diedit.`;
+        percentText.textContent = '100%';
+        bar.style.width = '100%';
+
+        renderOcrList();
+        renderCanvas();
+        if (detected.length > 0) selectOcrBox(detected[0].id);
+      } catch (err) {
+        statusText.textContent = 'Gagal memproses OCR: ' + err.message;
       }
+    });
 
-      // Draw manual drag-selection rectangle if user is drawing a new OCR box
-      if (!state.isExporting && state.isSelectingBox && state.selectStartPt && state.selectCurrentPt) {
-        const sx = Math.min(state.selectStartPt.x, state.selectCurrentPt.x);
-        const sy = Math.min(state.selectStartPt.y, state.selectCurrentPt.y);
-        const sw = Math.abs(state.selectCurrentPt.x - state.selectStartPt.x);
-        const sh = Math.abs(state.selectCurrentPt.y - state.selectStartPt.y);
-
-        targetCtx.save();
-        targetCtx.strokeStyle = '#38bdf8';
-        targetCtx.lineWidth = 2.5;
-        targetCtx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-        targetCtx.fillRect(sx, sy, sw, sh);
-        targetCtx.strokeRect(sx, sy, sw, sh);
-        targetCtx.restore();
-      }
-    }
-
-    function renderCanvas() {
-      if (!state.baseImage) return;
-
-      const W = state.baseImage.naturalWidth || state.baseImage.width;
-      const H = state.baseImage.naturalHeight || state.baseImage.height;
-
-      if (canvas.width !== W || canvas.height !== H) {
-        canvas.width = W;
-        canvas.height = H;
-        document.getElementById('canvasResolutionBadge').textContent = `${W} × ${H} px`;
-      }
-
-      ctx.clearRect(0, 0, W, H);
-
-      // 1. Draw Base Photo
-      ctx.drawImage(state.baseImage, 0, 0, W, H);
-
-      // Hold "Lihat Foto Asli"
-      if (state.showOriginalOnly) return;
-
-      // 2. Render In-Place OCR Edits (Mode A / selective line edits)
-      renderInPlaceOcrEdits(ctx, W, H);
-
-      const baseUnit = Math.min(W, H) / 1000;
-      const u = baseUnit * state.globalScale;
-      const footerH = state.enableFooter ? Math.round(118 * baseUnit) : 0;
-
-      // Subtle bottom scrim ONLY if Full Text Block overlay is enabled
-      if (state.enableTextBlock) {
-        const scrimGrad = ctx.createLinearGradient(0, H - footerH - 420 * u, 0, H - footerH);
-        scrimGrad.addColorStop(0, 'rgba(0,0,0,0)');
-        scrimGrad.addColorStop(1, 'rgba(0,0,0,0.46)');
-        ctx.fillStyle = scrimGrad;
-        ctx.fillRect(0, H - footerH - 420 * u, W, 420 * u);
-      }
-
-      // ==========================================
-      // 3. BADGE KODE WILAYAH (Toggleable)
-      // ==========================================
-      if (state.enableBadge && state.badgeCode.trim()) {
-        const bx = (state.badgePos.x / 100) * W;
-        const by = (state.badgePos.y / 100) * H;
-        const badgeFont = Math.round(32 * u);
-        ctx.font = `700 ${badgeFont}px Inter, Roboto, sans-serif`;
-        const textMetrics = ctx.measureText(state.badgeCode);
-        const padX = 24 * u;
-        const bw = textMetrics.width + padX * 2;
-        const bh = 58 * u;
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.28)';
-        ctx.shadowBlur = 10 * u;
-        ctx.shadowOffsetY = 3 * u;
-        drawRoundedRect(ctx, bx, by, bw, bh, 12 * u);
-        ctx.fillStyle = state.badgeColor;
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'center';
-        ctx.fillText(state.badgeCode, bx + bw / 2, by + bh / 2 + 1 * u);
-        ctx.restore();
-
-        state.boundingBoxes.badge = { x: bx, y: by, w: bw, h: bh };
-      } else {
-        state.boundingBoxes.badge = null;
-      }
-
-      // ==========================================
-      // 4. MINI-MAP SATELLITE BOX (Toggleable)
-      // ==========================================
-      if (state.enableMap) {
-        const mx = (state.mapPos.x / 100) * W;
-        const my = (state.mapPos.y / 100) * H;
-        const mapSize = 235 * u;
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.4)';
-        ctx.shadowBlur = 14 * u;
-        ctx.shadowOffsetY = 4 * u;
-
-        drawRoundedRect(ctx, mx - 4 * u, my - 4 * u, mapSize + 8 * u, mapSize + 8 * u, 14 * u);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-
-        drawRoundedRect(ctx, mx, my, mapSize, mapSize, 10 * u);
-        ctx.clip();
-
-        const activeMapImg = state.customMapImage || state.mapSnapshot;
-        if (activeMapImg) {
-          ctx.drawImage(activeMapImg, mx, my, mapSize, mapSize);
-        } else {
-          ctx.fillStyle = '#1e293b';
-          ctx.fillRect(mx, my, mapSize, mapSize);
-        }
-        ctx.restore();
-
-        state.boundingBoxes.map = { x: mx, y: my, w: mapSize, h: mapSize };
-      } else {
-        state.boundingBoxes.map = null;
-      }
-
-      // ==========================================
-      // 5. LOGO + FULL GEOTAG TEXT BLOCK (Toggleable)
-      // ==========================================
-      if (state.enableTextBlock) {
-        const tx = (state.textPos.x / 100) * W;
-        let cursorY = (state.textPos.y / 100) * H;
-        const blockStartY = cursorY;
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.75)';
-        ctx.shadowBlur = 6 * u;
-        ctx.shadowOffsetX = 1 * u;
-        ctx.shadowOffsetY = 1.5 * u;
-
-        if (state.enableLogoAbove && state.logoImage) {
-          const logoW = 145 * u;
-          const logoH = 115 * u;
-          ctx.drawImage(state.logoImage, tx - 6 * u, cursorY - logoH - 8 * u, logoW, logoH);
-        }
-
-        const titleFontSize = Math.round(36 * u);
-        ctx.font = `700 ${titleFontSize}px Inter, Roboto, sans-serif`;
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(state.title, tx, cursorY);
-
-        cursorY += titleFontSize + 16 * u;
-        const accentBarTop = cursorY;
-
-        const indentX = tx + 22 * u;
-        const detailFontSize = Math.round(25 * u);
-        const lineGap = 11 * u;
-        ctx.font = `500 ${detailFontSize}px Inter, Roboto, sans-serif`;
-
-        ctx.fillText(state.formattedDate, indentX, cursorY);
-        cursorY += detailFontSize + lineGap;
-
-        const maxAddressWidth = Math.min(W * 0.64, 660 * u);
-        const addrLines = wrapTextLines(ctx, state.address, maxAddressWidth);
-        for (const line of addrLines) {
-          ctx.fillText(line, indentX, cursorY);
-          cursorY += detailFontSize + 6 * u;
-        }
-        cursorY += 5 * u;
-
-        ctx.fillText(state.coordText, indentX, cursorY);
-        cursorY += detailFontSize + lineGap;
-
-        ctx.fillText(`Altitude ${state.altitude}`, indentX, cursorY);
-        cursorY += detailFontSize + lineGap;
-
-        ctx.fillText(`Compass ${state.compassText}`, indentX, cursorY);
-        const accentBarBottom = cursorY + detailFontSize;
-
-        ctx.fillStyle = '#facc15';
-        drawRoundedRect(ctx, tx + 2 * u, accentBarTop, 5.5 * u, accentBarBottom - accentBarTop, 3 * u);
-        ctx.fill();
-
-        cursorY = accentBarBottom + 16 * u;
-
-        // Verified Shield Icon + Photo Code
-        const shieldSize = 22 * u;
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-        ctx.lineWidth = 2.2 * u;
-        ctx.beginPath();
-        ctx.moveTo(tx + shieldSize / 2, cursorY);
-        ctx.lineTo(tx + shieldSize, cursorY + shieldSize * 0.25);
-        ctx.lineTo(tx + shieldSize, cursorY + shieldSize * 0.65);
-        ctx.quadraticCurveTo(tx + shieldSize / 2, cursorY + shieldSize, tx + shieldSize / 2, cursorY + shieldSize);
-        ctx.quadraticCurveTo(tx, cursorY + shieldSize * 0.65, tx, cursorY + shieldSize * 0.65);
-        ctx.lineTo(tx, cursorY + shieldSize * 0.25);
-        ctx.closePath();
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(tx + shieldSize * 0.28, cursorY + shieldSize * 0.52);
-        ctx.lineTo(tx + shieldSize * 0.45, cursorY + shieldSize * 0.68);
-        ctx.lineTo(tx + shieldSize * 0.74, cursorY + shieldSize * 0.35);
-        ctx.stroke();
-
-        const codeFontSize = Math.round(21 * u);
-        ctx.font = `500 ${codeFontSize}px Inter, Roboto, sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
-        ctx.fillText(`Photo Code: `, tx + shieldSize + 10 * u, cursorY + 1 * u);
-        const labelW = ctx.measureText('Photo Code: ').width;
-        ctx.font = `700 ${codeFontSize}px Inter, Roboto, sans-serif`;
-        ctx.fillText(state.photoCode, tx + shieldSize + 10 * u + labelW, cursorY + 1 * u);
-
-        ctx.restore();
-
-        state.boundingBoxes.text = {
-          x: tx,
-          y: blockStartY - (state.enableLogoAbove ? 110 * u : 0),
-          w: maxAddressWidth + 40 * u,
-          h: (cursorY + 30 * u) - (blockStartY - (state.enableLogoAbove ? 110 * u : 0))
-        };
-      } else {
-        state.boundingBoxes.text = null;
-      }
-
-      // ==========================================
-      // 6. VERTICAL SIDE "Timemark Verified" (Toggleable)
-      // ==========================================
-      if (state.enableSideVerified) {
-        ctx.save();
-        const sideX = W - 22 * baseUnit;
-        const sideY = H * 0.52;
-        ctx.translate(sideX, sideY);
-        ctx.rotate(-Math.PI / 2);
-
-        ctx.font = `600 ${Math.round(17 * baseUnit)}px Inter, sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 4 * baseUnit;
-        ctx.textAlign = 'left';
-        ctx.fillText(`✔ ${state.photoCode}  Timemark Verified`, 0, 0);
-        ctx.restore();
-      }
-
-      // ==========================================
-      // 7. BOTTOM WHITE FOOTER BAR (Toggleable)
-      // ==========================================
-      if (state.enableFooter) {
-        const fy = H - footerH;
-        ctx.save();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, fy, W, footerH);
-
-        const diagX1 = W - 210 * baseUnit;
-        const diagX2 = W - 255 * baseUnit;
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 2 * baseUnit;
-        ctx.beginPath();
-        ctx.moveTo(diagX1, fy);
-        ctx.lineTo(diagX2, H);
-        ctx.stroke();
-
-        const avRadius = 38 * baseUnit;
-        const avCenterX = 64 * baseUnit;
-        const avCenterY = fy + footerH / 2;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.clip();
-        if (state.avatarImage) {
-          ctx.drawImage(state.avatarImage, avCenterX - avRadius, avCenterY - avRadius, avRadius * 2, avRadius * 2);
-        }
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 2 * baseUnit;
-        ctx.stroke();
-
-        const textStartX = avCenterX + avRadius + 22 * baseUnit;
-        ctx.fillStyle = '#0f172a';
-        ctx.font = `700 ${Math.round(28 * baseUnit)}px Inter, Roboto, sans-serif`;
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(state.staffName, textStartX, avCenterY - 2 * baseUnit);
-
-        ctx.fillStyle = '#475569';
-        ctx.font = `500 ${Math.round(22 * baseUnit)}px Inter, Roboto, sans-serif`;
-        ctx.textBaseline = 'top';
-        ctx.fillText(state.staffRole, textStartX, avCenterY + 5 * baseUnit);
-
-        if (state.logoImage) {
-          const fLogoW = 110 * baseUnit;
-          const fLogoH = 88 * baseUnit;
-          const fLogoX = W - 155 * baseUnit;
-          const fLogoY = fy + (footerH - fLogoH) / 2;
-          ctx.drawImage(state.logoImage, fLogoX, fLogoY, fLogoW, fLogoH);
-        }
-
-        ctx.restore();
-      }
-    }
-
-    // ==========================================
-    // 8. CANVAS POINTER INTERACTIONS (IN-PLACE OCR CLICK / SELECT / DRAG)
-    // ==========================================
-    function getCanvasCoords(evt) {
-      const rect = canvas.getBoundingClientRect();
-      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-      const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      return {
-        x: (clientX - rect.left) * scaleX,
-        y: (clientY - rect.top) * scaleY
-      };
-    }
-
-    function isInsideBox(pt, box) {
-      if (!box) return false;
-      return pt.x >= box.x && pt.x <= box.x + box.w && pt.y >= box.y && pt.y <= box.y + box.h;
-    }
-
-    function selectOcrBoxById(id) {
+    function selectOcrBox(id) {
       state.selectedOcrId = id;
       const box = state.ocrBoxes.find(b => b.id === id);
-      const card = document.getElementById('inPlaceEditorCard');
-
-      if (box) {
-        card.classList.remove('hidden');
-        document.getElementById('inpInPlaceText').value = box.text;
-        document.getElementById('inpInPlaceFontSize').value = box.fontSize;
-        document.getElementById('inpInPlaceWeight').value = box.fontWeight || '500';
-        document.getElementById('inpInPlaceColor').value = box.color || '#ffffff';
-        document.getElementById('inpInPlaceBlur').value = box.blurRadius || 14;
-        document.getElementById('lblPatchBlur').textContent = `${box.blurRadius || 14}px`;
-
-        // Switch to OCR In-Place tab automatically so user sees the input right away
-        document.querySelector('[data-tab="tabOcrInPlace"]').click();
-        setTimeout(() => document.getElementById('inpInPlaceText').focus(), 50);
-      } else {
-        card.classList.add('hidden');
-      }
-
-      renderOcrDetectedList();
-      renderCanvas();
-    }
-
-    function handlePointerDown(evt) {
-      if (!state.baseImage) return;
-      const pt = getCanvasCoords(evt);
-
-      // 1. Manual Drag-Selection Box for OCR
-      if (state.manualSelectActive) {
-        evt.preventDefault();
-        state.isSelectingBox = true;
-        state.selectStartPt = pt;
-        state.selectCurrentPt = pt;
+      const editor = document.getElementById('activeOcrEditor');
+      if (!box) {
+        editor.classList.add('hidden');
         renderCanvas();
         return;
       }
 
-      // 2. Check if user clicked on an In-Place OCR Bounding Box
-      if (state.showOcrGuides && state.ocrBoxes.length > 0) {
+      editor.classList.remove('hidden');
+      document.getElementById('ocrOriginalTextDisplay').textContent = box.originalText;
+      document.getElementById('ocrReplacementInput').value = box.text;
+      document.getElementById('ocrBoxFontSize').value = box.fontSize;
+      document.getElementById('ocrBoxColor').value = box.color;
+      document.getElementById('ocrBoxWeight').value = box.weight || '500';
+      document.getElementById('ocrBoxShadow').value = box.shadowStrength ?? 75;
+      document.getElementById('ocrBoxOffsetY').value = box.offsetY || 0;
+
+      renderOcrList();
+      renderCanvas();
+    }
+
+    function renderOcrList() {
+      const listEl = document.getElementById('ocrLinesList');
+      document.getElementById('ocrCount').textContent = state.ocrBoxes.length;
+
+      if (state.ocrBoxes.length === 0) {
+        listEl.innerHTML = `<div class="text-[11px] text-slate-500 text-center py-4 border border-dashed border-slate-800 rounded-lg">Belum ada kotak teks.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = '';
+      state.ocrBoxes.forEach(box => {
+        const isSel = box.id === state.selectedOcrId;
+        const item = document.createElement('div');
+        item.className = `p-2 rounded-lg border text-xs cursor-pointer transition flex items-center justify-between gap-2 ${
+          isSel ? 'bg-sky-950/60 border-sky-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+        }`;
+        item.innerHTML = `
+          <div class="truncate">
+            <div class="font-medium truncate">${escapeHtml(box.text)}</div>
+            <div class="text-[10px] ${box.edited ? 'text-emerald-400' : 'text-slate-500'}">
+              ${box.edited ? '✓ Diedit (Glyph Inpaint)' : 'Teks Asli'}
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-500 shrink-0"></i>
+        `;
+        item.addEventListener('click', () => selectOcrBox(box.id));
+        listEl.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    // Active OCR box inputs
+    document.getElementById('ocrReplacementInput').addEventListener('input', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) {
+        box.text = e.target.value;
+        box.edited = (box.text !== box.originalText) || box.isManual;
+        renderOcrList();
+        renderCanvas();
+      }
+    });
+
+    document.getElementById('ocrBoxFontSize').addEventListener('input', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) { box.fontSize = parseInt(e.target.value) || 20; box.edited = true; renderCanvas(); }
+    });
+
+    document.getElementById('ocrBoxColor').addEventListener('input', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) { box.color = e.target.value; box.edited = true; renderCanvas(); }
+    });
+
+    document.getElementById('ocrBoxWeight').addEventListener('change', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) { box.weight = e.target.value; box.edited = true; renderCanvas(); }
+    });
+
+    document.getElementById('ocrBoxShadow').addEventListener('input', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) { box.shadowStrength = parseInt(e.target.value); box.edited = true; renderCanvas(); }
+    });
+
+    document.getElementById('ocrBoxOffsetY').addEventListener('input', e => {
+      const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
+      if (box) { box.offsetY = parseInt(e.target.value) || 0; box.edited = true; renderCanvas(); }
+    });
+
+    // Glyph Inpainting fine-tuning listeners
+    document.getElementById('glyphSensitivity').addEventListener('input', e => {
+      state.glyphSensitivity = parseInt(e.target.value) || 0;
+      document.getElementById('glyphThreshVal').textContent = state.glyphSensitivity === 0 ? 'Auto (Otsu)' : (state.glyphSensitivity > 0 ? `+${state.glyphSensitivity}` : state.glyphSensitivity);
+      renderCanvas();
+    });
+
+    document.getElementById('haloRadius').addEventListener('input', e => {
+      state.haloRadius = parseInt(e.target.value) || 2;
+      document.getElementById('haloRadiusVal').textContent = `${state.haloRadius} px`;
+      renderCanvas();
+    });
+
+    document.getElementById('grainStrength').addEventListener('input', e => {
+      const val = parseInt(e.target.value) || 0;
+      state.grainStrength = val / 100;
+      document.getElementById('grainStrengthVal').textContent = `${val}%`;
+      renderCanvas();
+    });
+
+    document.getElementById('showGlyphMaskPreview').addEventListener('change', e => {
+      state.showGlyphMaskPreview = e.target.checked;
+      renderCanvas();
+    });
+
+    document.getElementById('btnDeleteOcrBox').addEventListener('click', () => {
+      state.ocrBoxes = state.ocrBoxes.filter(b => b.id !== state.selectedOcrId);
+      state.selectedOcrId = null;
+      document.getElementById('activeOcrEditor').classList.add('hidden');
+      renderOcrList();
+      renderCanvas();
+    });
+
+    document.getElementById('btnClearAllOcr').addEventListener('click', () => {
+      state.ocrBoxes = [];
+      state.selectedOcrId = null;
+      document.getElementById('activeOcrEditor').classList.add('hidden');
+      renderOcrList();
+      renderCanvas();
+    });
+
+    document.getElementById('showOcrGuides').addEventListener('change', e => {
+      state.showOcrGuides = e.target.checked;
+      renderCanvas();
+    });
+
+    document.getElementById('btnAddManualBox').addEventListener('click', () => {
+      state.isDrawingManualBox = true;
+      canvas.style.cursor = 'crosshair';
+      document.getElementById('canvasHint').textContent = 'Tarik kotak di atas teks pada foto yang ingin diubah...';
+    });
+
+    // =========================================================================
+    // CANVAS MOUSE EVENTS
+    // =========================================================================
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height)
+      };
+    }
+
+    function isInside(pt, b) {
+      return b && pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h;
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      const pt = getCanvasCoords(e);
+
+      if (state.isDrawingManualBox) {
+        state.manualBoxStart = pt;
+        state.manualBoxCurrent = pt;
+        return;
+      }
+
+      if (state.showOcrGuides) {
         for (let i = state.ocrBoxes.length - 1; i >= 0; i--) {
-          const b = state.ocrBoxes[i];
-          const hitBox = {
-            x: b.bbox.x0 - 6,
-            y: b.bbox.y0 - 6,
-            w: (b.bbox.x1 - b.bbox.x0) + 12,
-            h: (b.bbox.y1 - b.bbox.y0) + 12
-          };
-          if (isInsideBox(pt, hitBox)) {
-            evt.preventDefault();
-            selectOcrBoxById(b.id);
+          if (isInside(pt, state.ocrBoxes[i])) {
+            selectOcrBox(state.ocrBoxes[i].id);
+            document.querySelector('[data-tab="tab-ocr"]').click();
+            setTimeout(() => document.getElementById('ocrReplacementInput').focus(), 50);
             return;
           }
         }
       }
 
-      // 3. Dragging Active Overlay Elements (Mode B)
-      if (isInsideBox(pt, state.boundingBoxes.badge)) {
+      if (state.layers.badge && isInside(pt, state._boundsBadge)) {
         state.draggingTarget = 'badge';
-        state.dragOffset = {
-          x: pt.x - (state.badgePos.x / 100) * canvas.width,
-          y: pt.y - (state.badgePos.y / 100) * canvas.height
-        };
-      } else if (isInsideBox(pt, state.boundingBoxes.map)) {
+        state.dragOffset = { x: pt.x - state._boundsBadge.x, y: pt.y - state._boundsBadge.y };
+      } else if (state.layers.map && isInside(pt, state._boundsMap)) {
         state.draggingTarget = 'map';
-        state.dragOffset = {
-          x: pt.x - (state.mapPos.x / 100) * canvas.width,
-          y: pt.y - (state.mapPos.y / 100) * canvas.height
-        };
-      } else if (isInsideBox(pt, state.boundingBoxes.text)) {
-        state.draggingTarget = 'text';
-        state.dragOffset = {
-          x: pt.x - (state.textPos.x / 100) * canvas.width,
-          y: pt.y - (state.textPos.y / 100) * canvas.height
-        };
+        state.dragOffset = { x: pt.x - state._boundsMap.x, y: pt.y - state._boundsMap.y };
+      } else if ((state.layers.mainLogo || state.layers.textBlock) && isInside(pt, state._boundsText)) {
+        state.draggingTarget = 'textBlock';
+        state.dragOffset = { x: pt.x - state._boundsText.x, y: pt.y - state._boundsText.y };
       }
+    });
 
-      if (state.draggingTarget) {
-        evt.preventDefault();
-        canvas.style.cursor = 'grabbing';
-      }
-    }
+    canvas.addEventListener('mousemove', e => {
+      const pt = getCanvasCoords(e);
 
-    function handlePointerMove(evt) {
-      if (!state.baseImage) return;
-      const pt = getCanvasCoords(evt);
-
-      if (state.manualSelectActive && state.isSelectingBox) {
-        evt.preventDefault();
-        state.selectCurrentPt = pt;
+      if (state.isDrawingManualBox && state.manualBoxStart) {
+        state.manualBoxCurrent = pt;
         renderCanvas();
         return;
       }
 
-      if (state.draggingTarget) {
-        evt.preventDefault();
-        const newX = Math.max(0, Math.min(85, ((pt.x - state.dragOffset.x) / canvas.width) * 100));
-        const newY = Math.max(0, Math.min(88, ((pt.y - state.dragOffset.y) / canvas.height) * 100));
-
-        if (state.draggingTarget === 'badge') {
-          state.badgePos = { x: newX, y: newY };
-        } else if (state.draggingTarget === 'map') {
-          state.mapPos = { x: newX, y: newY };
-        } else if (state.draggingTarget === 'text') {
-          state.textPos = { x: newX, y: newY };
-        }
-        renderCanvas();
-      } else if (!state.manualSelectActive) {
-        const hoverOcr = state.showOcrGuides && state.ocrBoxes.some(b => isInsideBox(pt, {
-          x: b.bbox.x0 - 6, y: b.bbox.y0 - 6,
-          w: (b.bbox.x1 - b.bbox.x0) + 12, h: (b.bbox.y1 - b.bbox.y0) + 12
-        }));
-        const hoverOverlay = isInsideBox(pt, state.boundingBoxes.badge) ||
-                             isInsideBox(pt, state.boundingBoxes.map) ||
-                             isInsideBox(pt, state.boundingBoxes.text);
-        canvas.style.cursor = hoverOcr ? 'pointer' : (hoverOverlay ? 'grab' : 'default');
-      }
-    }
-
-    async function handlePointerUp() {
-      if (state.manualSelectActive && state.isSelectingBox && state.selectStartPt && state.selectCurrentPt) {
-        const x0 = Math.round(Math.min(state.selectStartPt.x, state.selectCurrentPt.x));
-        const y0 = Math.round(Math.min(state.selectStartPt.y, state.selectCurrentPt.y));
-        const x1 = Math.round(Math.max(state.selectStartPt.x, state.selectCurrentPt.x));
-        const y1 = Math.round(Math.max(state.selectStartPt.y, state.selectCurrentPt.y));
-
-        state.isSelectingBox = false;
-        state.manualSelectActive = false;
-        const btnManual = document.getElementById('btnToggleManualSelect');
-        btnManual.classList.remove('bg-blue-600', 'text-white');
-        btnManual.classList.add('bg-slate-800', 'text-slate-200');
-        canvas.style.cursor = 'default';
-
-        if ((x1 - x0) > 15 && (y1 - y0) > 10) {
-          await runOcrOnSpecificRegion({ x0, y0, x1, y1 });
-        } else {
-          renderCanvas();
-        }
-        return;
-      }
-
-      state.draggingTarget = null;
-      canvas.style.cursor = state.manualSelectActive ? 'crosshair' : 'default';
-    }
-
-    canvas.addEventListener('mousedown', handlePointerDown);
-    canvas.addEventListener('mousemove', handlePointerMove);
-    window.addEventListener('mouseup', handlePointerUp);
-    canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
-    canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
-    window.addEventListener('touchend', handlePointerUp);
-
-    // ==========================================
-    // 9. TESSERACT.JS IN-PLACE BOUNDING BOX OCR ENGINE
-    // ==========================================
-    async function runOcrInPlaceDetection() {
-      if (!state.baseImage) {
-        showToast('Silakan upload foto terlebih dahulu!', 'warning');
-        return;
-      }
-
-      const progressBox = document.getElementById('ocrProgressBox');
-      const statusText = document.getElementById('ocrStatusText');
-      const percentText = document.getElementById('ocrPercentText');
-      const progressBar = document.getElementById('ocrProgressBar');
-
-      progressBox.classList.remove('hidden');
-      statusText.textContent = 'Memindai posisi baris teks di foto...';
-      progressBar.style.width = '12%';
-
-      try {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = state.baseImage.naturalWidth || state.baseImage.width;
-        tempCanvas.height = state.baseImage.naturalHeight || state.baseImage.height;
-        const tctx = tempCanvas.getContext('2d');
-        tctx.drawImage(state.baseImage, 0, 0);
-
-        const worker = await Tesseract.createWorker('eng+ind', 1, {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-              const pct = Math.round(m.progress * 100);
-              statusText.textContent = 'Mendeteksi koordinat teks (In-Place)...';
-              percentText.textContent = `${pct}%`;
-              progressBar.style.width = `${pct}%`;
-            }
-          }
-        });
-
-        const result = await worker.recognize(tempCanvas);
-        await worker.terminate();
-
-        const detectedLines = (result.data.lines || [])
-          .filter(line => line.text && line.text.trim().length >= 2 && line.confidence > 30)
-          .map((line, idx) => {
-            const cleanText = line.text.replace(/\n/g, ' ').trim();
-            const bh = line.bbox.y1 - line.bbox.y0;
-            const estFontSize = Math.max(14, Math.round(bh * 0.82));
-            const isTitle = /perjadin|bps/i.test(cleanText);
-            return {
-              id: `ocr_${Date.now()}_${idx}`,
-              originalText: cleanText,
-              text: cleanText,
-              edited: false,
-              bbox: { ...line.bbox },
-              fontSize: estFontSize,
-              fontWeight: isTitle ? '700' : '500',
-              color: '#ffffff',
-              blurRadius: 14
-            };
-          });
-
-        state.ocrBoxes = detectedLines;
-        state.showOcrGuides = true;
-        document.getElementById('chkShowOcrGuides').checked = true;
-
-        statusText.textContent = `Ditemukan ${detectedLines.length} baris teks! Klik kotak di foto untuk mengedit.`;
-        percentText.textContent = '100%';
-        progressBar.style.width = '100%';
-
-        renderOcrDetectedList();
-        renderCanvas();
-
-        if (detectedLines.length > 0) {
-          selectOcrBoxById(detectedLines[0].id);
-          showToast(`${detectedLines.length} baris teks terdeteksi! Klik teks mana pun di foto untuk mengedit.`, 'success');
-        } else {
-          showToast('Tidak ada teks jelas terdeteksi otomatis. Coba gunakan "Seleksi Area Manual".', 'warning');
-        }
-      } catch (err) {
-        console.error(err);
-        statusText.textContent = 'Gagal memproses OCR.';
-        showToast('Error OCR: ' + err.message, 'error');
-      }
-    }
-
-    async function runOcrOnSpecificRegion(bbox) {
-      const progressBox = document.getElementById('ocrProgressBox');
-      const statusText = document.getElementById('ocrStatusText');
-      progressBox.classList.remove('hidden');
-      statusText.textContent = 'Membaca teks pada area terseleksi...';
-
-      try {
-        const cropCanvas = document.createElement('canvas');
-        const cw = bbox.x1 - bbox.x0;
-        const ch = bbox.y1 - bbox.y0;
-        cropCanvas.width = cw;
-        cropCanvas.height = ch;
-        cropCanvas.getContext('2d').drawImage(state.baseImage, bbox.x0, bbox.y0, cw, ch, 0, 0, cw, ch);
-
-        const worker = await Tesseract.createWorker('eng+ind', 1);
-        const res = await worker.recognize(cropCanvas);
-        await worker.terminate();
-
-        const extracted = (res.data.text || '').replace(/\n/g, ' ').trim() || 'Teks Baru';
-        const newBox = {
-          id: `ocr_manual_${Date.now()}`,
-          originalText: extracted,
-          text: extracted,
-          edited: false,
-          bbox,
-          fontSize: Math.max(14, Math.round(ch * 0.72)),
-          fontWeight: '500',
-          color: '#ffffff',
-          blurRadius: 14
-        };
-
-        state.ocrBoxes.push(newBox);
-        statusText.textContent = 'Area teks ditambahkan!';
-        selectOcrBoxById(newBox.id);
-        showToast('Area teks siap diedit langsung di posisinya!', 'success');
-      } catch (e) {
-        showToast('Gagal membaca area seleksi.', 'error');
-      }
-    }
-
-    function renderOcrDetectedList() {
-      const listEl = document.getElementById('ocrDetectedList');
-      document.getElementById('ocrLineCount').textContent = state.ocrBoxes.length;
-
-      if (!state.ocrBoxes.length) {
-        listEl.innerHTML = `<div class="text-xs text-slate-500 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-center">Belum ada teks terdeteksi. Klik <strong>Deteksi Teks (OCR)</strong> atau gunakan <strong>Seleksi Area Manual</strong>.</div>`;
-        return;
-      }
-
-      listEl.innerHTML = '';
-      state.ocrBoxes.forEach((box, index) => {
-        const isSelected = box.id === state.selectedOcrId;
-        const item = document.createElement('button');
-        item.className = `w-full text-left px-3 py-2 rounded-xl border text-xs flex items-center justify-between gap-2 transition cursor-pointer ${
-          isSelected
-            ? 'bg-blue-600/20 border-blue-500 text-white'
-            : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700'
-        }`;
-        item.innerHTML = `
-          <div class="truncate">
-            <span class="font-mono text-[10px] text-slate-500 mr-1.5">#${index + 1}</span>
-            <span class="font-medium">${box.text}</span>
-          </div>
-          <span class="text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
-            box.edited ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
-          }">${box.edited ? 'Diedit' : 'Asli'}</span>
-        `;
-        item.addEventListener('click', () => selectOcrBoxById(box.id));
-        listEl.appendChild(item);
-      });
-    }
-
-    // ==========================================
-    // 10. MODE SWITCHER & COMPONENT TOGGLE SYNC
-    // ==========================================
-    function setComponentToggles({ badge, map, logoAbove, textBlock, footer, sideVerified }) {
-      state.enableBadge = badge;
-      state.enableMap = map;
-      state.enableLogoAbove = logoAbove;
-      state.enableTextBlock = textBlock;
-      state.enableFooter = footer;
-      state.enableSideVerified = sideVerified;
-
-      document.getElementById('tglShowBadge').checked = badge;
-      document.getElementById('tglShowMap').checked = map;
-      document.getElementById('tglShowMapSecondary').checked = map;
-      document.getElementById('tglShowLogoAbove').checked = logoAbove;
-      document.getElementById('tglShowTextBlock').checked = textBlock;
-      document.getElementById('tglShowFooter').checked = footer;
-      document.getElementById('tglShowSideVerified').checked = sideVerified;
-    }
-
-    function switchWorkspaceMode(targetMode) {
-      state.mode = targetMode;
-
-      document.querySelectorAll('.mode-tab').forEach(b => {
-        b.classList.remove('bg-blue-600', 'text-white', 'shadow');
-        b.classList.add('text-slate-400');
-      });
-
-      const activeBtn = targetMode === 'edit' ? document.getElementById('modeBtnEdit') : document.getElementById('modeBtnNew');
-      activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow');
-      activeBtn.classList.remove('text-slate-400');
-
-      const banner = document.getElementById('modeDescBanner');
-
-      if (targetMode === 'edit') {
-        // MODE A: Edit Foto Ber-Template (Keep original Map, Badge, Logo, Footer intact; edit text in-place via OCR)
-        setComponentToggles({
-          badge: false,
-          map: false,
-          logoAbove: false,
-          textBlock: false,
-          footer: false,
-          sideVerified: false
-        });
-        banner.innerHTML = `<strong class="text-amber-400">Mode A Aktif:</strong> Peta, badge & footer asli foto dipertahankan. Klik <strong>Deteksi Teks (OCR)</strong> untuk mengedit tulisan langsung di posisinya.`;
-        document.querySelector('[data-tab="tabOcrInPlace"]').click();
-      } else {
-        // MODE B: Stempel Foto Mentah (Full New Timemark BPS Overlay)
-        setComponentToggles({
-          badge: true,
-          map: true,
-          logoAbove: true,
-          textBlock: true,
-          footer: true,
-          sideVerified: true
-        });
-        banner.innerHTML = `<strong class="text-blue-400">Mode B Aktif:</strong> Menempelkan template Timemark BPS lengkap ke foto mentah.`;
-        document.querySelector('[data-tab="tabGeotag"]').click();
-        renderSatelliteMiniMapToOffscreen();
-      }
-
-      renderCanvas();
-    }
-
-    // ==========================================
-    // 11. EVENT LISTENERS & UI BINDINGS
-    // ==========================================
-    function bindUIEvents() {
-      // Tab Navigation
-      document.querySelectorAll('.ctrl-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.ctrl-tab').forEach(b => {
-            b.classList.remove('active', 'border-blue-500', 'text-blue-400', 'bg-slate-800/60');
-            b.classList.add('border-transparent', 'text-slate-400');
-          });
-          btn.classList.add('active', 'border-blue-500', 'text-blue-400', 'bg-slate-800/60');
-          btn.classList.remove('border-transparent', 'text-slate-400');
-
-          const targetId = btn.getAttribute('data-tab');
-          document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-          document.getElementById(targetId).classList.remove('hidden');
-
-          if (targetId === 'tabMap' && leafletMap) {
-            setTimeout(() => leafletMap.invalidateSize(), 150);
-          }
-        });
-      });
-
-      // Mode Switcher Buttons
-      document.getElementById('modeBtnEdit').addEventListener('click', () => switchWorkspaceMode('edit'));
-      document.getElementById('modeBtnNew').addEventListener('click', () => switchWorkspaceMode('new'));
-
-      // Component Toggles (Sakelar Elemen)
-      document.getElementById('tglShowBadge').addEventListener('change', (e) => {
-        state.enableBadge = e.target.checked;
-        renderCanvas();
-      });
-      const syncMapToggle = (checked) => {
-        state.enableMap = checked;
-        document.getElementById('tglShowMap').checked = checked;
-        document.getElementById('tglShowMapSecondary').checked = checked;
-        if (checked) renderSatelliteMiniMapToOffscreen();
-        else renderCanvas();
-      };
-      document.getElementById('tglShowMap').addEventListener('change', (e) => syncMapToggle(e.target.checked));
-      document.getElementById('tglShowMapSecondary').addEventListener('change', (e) => syncMapToggle(e.target.checked));
-
-      document.getElementById('tglShowLogoAbove').addEventListener('change', (e) => {
-        state.enableLogoAbove = e.target.checked;
-        renderCanvas();
-      });
-      document.getElementById('tglShowTextBlock').addEventListener('change', (e) => {
-        state.enableTextBlock = e.target.checked;
-        renderCanvas();
-      });
-      document.getElementById('tglShowFooter').addEventListener('change', (e) => {
-        state.enableFooter = e.target.checked;
-        renderCanvas();
-      });
-      document.getElementById('tglShowSideVerified').addEventListener('change', (e) => {
-        state.enableSideVerified = e.target.checked;
-        renderCanvas();
-      });
-
-      // Photo Upload
-      document.getElementById('photoUploadInput').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        state.baseImage = await loadImageFromURL(url);
-        state.ocrBoxes = [];
-        state.selectedOcrId = null;
-        renderOcrDetectedList();
-        renderCanvas();
-        showToast(`Foto "${file.name}" dimuat (${state.baseImage.naturalWidth}×${state.baseImage.naturalHeight})`, 'success');
-      });
-
-      // Load Demo Sample Photo
-      document.getElementById('btnLoadSample').addEventListener('click', async () => {
-        state.baseImage = await generateDemoSampleImage();
-        state.ocrBoxes = [];
-        state.selectedOcrId = null;
-        renderOcrDetectedList();
-        renderCanvas();
-        showToast('Foto contoh lapangan dimuat!', 'success');
-      });
-
-      // In-Place OCR Buttons & Field Inputs
-      document.getElementById('btnRunOcrInPlace').addEventListener('click', runOcrInPlaceDetection);
-
-      document.getElementById('btnToggleManualSelect').addEventListener('click', (e) => {
-        state.manualSelectActive = !state.manualSelectActive;
-        const btn = e.currentTarget;
-        if (state.manualSelectActive) {
-          btn.classList.remove('bg-slate-800', 'text-slate-200');
-          btn.classList.add('bg-blue-600', 'text-white');
-          canvas.style.cursor = 'crosshair';
-          showToast('Tarik kotak (drag) pada baris tulisan di foto yang ingin diedit.', 'info');
-        } else {
-          btn.classList.add('bg-slate-800', 'text-slate-200');
-          btn.classList.remove('bg-blue-600', 'text-white');
-          canvas.style.cursor = 'default';
-        }
-      });
-
-      document.getElementById('inpInPlaceText').addEventListener('input', (e) => {
-        const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
-        if (!box) return;
-        box.text = e.target.value;
-        box.edited = (box.text !== box.originalText);
-        renderOcrDetectedList();
-        renderCanvas();
-      });
-
-      document.getElementById('inpInPlaceFontSize').addEventListener('input', (e) => {
-        const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
-        if (!box) return;
-        box.fontSize = parseInt(e.target.value, 10) || 20;
-        box.edited = true;
-        renderCanvas();
-      });
-
-      document.getElementById('inpInPlaceWeight').addEventListener('change', (e) => {
-        const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
-        if (!box) return;
-        box.fontWeight = e.target.value;
-        box.edited = true;
-        renderCanvas();
-      });
-
-      document.getElementById('inpInPlaceColor').addEventListener('input', (e) => {
-        const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
-        if (!box) return;
-        box.color = e.target.value;
-        box.edited = true;
-        renderCanvas();
-      });
-
-      document.getElementById('inpInPlaceBlur').addEventListener('input', (e) => {
-        const box = state.ocrBoxes.find(b => b.id === state.selectedOcrId);
-        if (!box) return;
-        box.blurRadius = parseInt(e.target.value, 10);
-        document.getElementById('lblPatchBlur').textContent = `${box.blurRadius}px`;
-        renderCanvas();
-      });
-
-      document.getElementById('btnDeleteOcrBox').addEventListener('click', () => {
-        if (!state.selectedOcrId) return;
-        state.ocrBoxes = state.ocrBoxes.filter(b => b.id !== state.selectedOcrId);
-        state.selectedOcrId = null;
-        document.getElementById('inPlaceEditorCard').classList.add('hidden');
-        renderOcrDetectedList();
-        renderCanvas();
-      });
-
-      document.getElementById('btnClearAllOcrBoxes').addEventListener('click', () => {
-        state.ocrBoxes = [];
-        state.selectedOcrId = null;
-        document.getElementById('inPlaceEditorCard').classList.add('hidden');
-        renderOcrDetectedList();
-        renderCanvas();
-      });
-
-      document.getElementById('chkShowOcrGuides').addEventListener('change', (e) => {
-        state.showOcrGuides = e.target.checked;
-        renderCanvas();
-      });
-
-      // Geotag Text Inputs (Mode B)
-      document.getElementById('inpTitle').addEventListener('input', (e) => {
-        state.title = e.target.value;
-        renderCanvas();
-      });
-      document.getElementById('inpFormattedDate').addEventListener('input', (e) => {
-        state.formattedDate = e.target.value;
-        renderCanvas();
-      });
-
-      const updateDateFromPicker = () => {
-        const val = document.getElementById('inpDateTimePicker').value;
-        const tz = document.getElementById('inpTimezone').value;
-        state.timezone = tz;
-        if (val) {
-          const d = new Date(val);
-          state.formattedDate = formatTimemarkDate(d, tz);
-          document.getElementById('inpFormattedDate').value = state.formattedDate;
-          renderCanvas();
-        }
-      };
-      document.getElementById('inpDateTimePicker').addEventListener('change', updateDateFromPicker);
-      document.getElementById('inpTimezone').addEventListener('change', updateDateFromPicker);
-
-      document.getElementById('btnAutoFillNow').addEventListener('click', () => {
-        const now = new Date();
-        const tz = document.getElementById('inpTimezone').value;
-        state.formattedDate = formatTimemarkDate(now, tz);
-        document.getElementById('inpFormattedDate').value = state.formattedDate;
-        renderCanvas();
-      });
-
-      document.getElementById('inpAddress').addEventListener('input', (e) => {
-        state.address = e.target.value;
-        renderCanvas();
-      });
-
-      document.getElementById('inpLat').addEventListener('change', (e) => {
-        const lat = parseFloat(e.target.value);
-        if (!isNaN(lat)) updateLocationCoordinates(lat, state.lng, false);
-      });
-
-      document.getElementById('inpLng').addEventListener('change', (e) => {
-        const lng = parseFloat(e.target.value);
-        if (!isNaN(lng)) updateLocationCoordinates(state.lat, lng, false);
-      });
-
-      document.getElementById('inpCoordText').addEventListener('input', (e) => {
-        state.coordText = e.target.value;
-        renderCanvas();
-      });
-
-      document.getElementById('btnReverseGeocode').addEventListener('click', () => {
-        updateLocationCoordinates(state.lat, state.lng, true);
-      });
-
-      document.getElementById('inpAltitude').addEventListener('input', (e) => {
-        state.altitude = e.target.value;
-        renderCanvas();
-      });
-
-      document.getElementById('inpCompassText').addEventListener('input', (e) => {
-        state.compassText = e.target.value;
-        const numMatch = e.target.value.match(/(\d+)/);
-        if (numMatch) {
-          state.compassAngle = parseInt(numMatch[1], 10) % 360;
-          document.getElementById('inpCompassAngle').value = state.compassAngle;
-          renderSatelliteMiniMapToOffscreen();
-        }
-        renderCanvas();
-      });
-
-      document.getElementById('inpPhotoCode').addEventListener('input', (e) => {
-        state.photoCode = e.target.value.toUpperCase();
-        renderCanvas();
-      });
-
-      document.getElementById('btnGenCode').addEventListener('click', () => {
-        state.photoCode = generateRandomCode(14);
-        document.getElementById('inpPhotoCode').value = state.photoCode;
-        renderCanvas();
-      });
-
-      // Map Search & Sliders
-      document.getElementById('btnMapSearch').addEventListener('click', async () => {
-        const q = document.getElementById('inpMapSearch').value.trim();
-        if (!q) return;
-        try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
-          const list = await res.json();
-          if (list && list.length > 0) {
-            const lat = parseFloat(list[0].lat);
-            const lng = parseFloat(list[0].lon);
-            updateLocationCoordinates(lat, lng, true);
-          } else {
-            showToast('Lokasi tidak ditemukan.', 'warning');
-          }
-        } catch (err) {
-          showToast('Gagal mencari lokasi.', 'error');
-        }
-      });
-
-      document.getElementById('inpCompassAngle').addEventListener('input', (e) => {
-        const deg = parseInt(e.target.value, 10);
-        const dir = degreesToCardinal(deg);
-        state.compassAngle = deg;
-        state.compassText = `${deg}° ${dir}`;
-        document.getElementById('lblCompassDeg').textContent = `${deg}° (${dir})`;
-        document.getElementById('inpCompassText').value = state.compassText;
-        renderSatelliteMiniMapToOffscreen();
-      });
-
-      document.getElementById('inpMapZoom').addEventListener('input', (e) => {
-        const z = parseInt(e.target.value, 10);
-        document.getElementById('lblMapZoom').textContent = z;
-        if (leafletMap) leafletMap.setZoom(z);
-        renderSatelliteMiniMapToOffscreen();
-      });
-
-      document.getElementById('btnCaptureMap').addEventListener('click', () => {
-        renderSatelliteMiniMapToOffscreen();
-        showToast('Tampilan satelit diperbarui ke kanvas!', 'success');
-      });
-
-      document.getElementById('customMapUpload').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        state.customMapImage = await loadImageFromURL(URL.createObjectURL(file));
-        document.getElementById('btnResetCustomMap').classList.remove('hidden');
-        renderCanvas();
-        showToast('Gambar mini-map custom diterapkan!', 'success');
-      });
-
-      document.getElementById('btnResetCustomMap').addEventListener('click', () => {
-        state.customMapImage = null;
-        document.getElementById('btnResetCustomMap').classList.add('hidden');
-        renderSatelliteMiniMapToOffscreen();
-      });
-
-      // Official BPS Logo & Profile Inputs
-      document.getElementById('btnFetchWikimediaBps').addEventListener('click', async () => {
-        await loadOfficialBpsLogo();
-        renderCanvas();
-        showToast('Logo resmi BPS (Biru-Hijau-Oranye) dimuat!', 'success');
-      });
-
-      document.getElementById('logoUploadInput').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        state.logoImage = await loadImageFromURL(url);
-        document.getElementById('previewBpsLogoBox').src = url;
-        renderCanvas();
-        showToast('Logo custom berhasil diterapkan!', 'success');
-      });
-
-      document.getElementById('inpBadgeCode').addEventListener('input', (e) => {
-        state.badgeCode = e.target.value;
-        renderCanvas();
-      });
-      document.getElementById('inpBadgeColor').addEventListener('input', (e) => {
-        state.badgeColor = e.target.value;
-        renderCanvas();
-      });
-
-      document.getElementById('avatarUploadInput').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        state.avatarImage = await loadImageFromURL(url);
-        document.getElementById('previewAvatarThumb').src = url;
-        renderCanvas();
-      });
-
-      document.getElementById('inpStaffName').addEventListener('input', (e) => {
-        state.staffName = e.target.value;
-        renderCanvas();
-      });
-
-      document.getElementById('inpStaffRole').addEventListener('input', (e) => {
-        state.staffRole = e.target.value;
-        renderCanvas();
-      });
-
-      // Global Scale & Position Reset
-      document.getElementById('inpGlobalScale').addEventListener('input', (e) => {
-        const val = parseInt(e.target.value, 10);
-        state.globalScale = val / 100;
-        document.getElementById('lblGlobalScale').textContent = `${val}%`;
-        renderCanvas();
-      });
-
-      document.getElementById('btnResetLayout').addEventListener('click', () => {
-        state.globalScale = 1.0;
-        state.badgePos = { x: 3.0, y: 2.5 };
-        state.mapPos = { x: 3.0, y: 10.5 };
-        state.textPos = { x: 3.0, y: 63.0 };
-        document.getElementById('inpGlobalScale').value = 100;
-        document.getElementById('lblGlobalScale').textContent = '100%';
-        renderCanvas();
-      });
-
-      // Compare Original Hold Button
-      const btnCompare = document.getElementById('btnToggleCompare');
-      const startCompare = () => { state.showOriginalOnly = true; renderCanvas(); };
-      const endCompare = () => { state.showOriginalOnly = false; renderCanvas(); };
-      btnCompare.addEventListener('mousedown', startCompare);
-      btnCompare.addEventListener('mouseup', endCompare);
-      btnCompare.addEventListener('mouseleave', endCompare);
-      btnCompare.addEventListener('touchstart', startCompare);
-      btnCompare.addEventListener('touchend', endCompare);
-
-      // Export / Download Full Resolution Image (Hides OCR selection boxes automatically)
-      document.getElementById('btnDownload').addEventListener('click', () => {
-        if (!state.baseImage) return;
-        state.isExporting = true;
-        renderCanvas();
-
-        const mime = document.getElementById('exportFormat').value;
-        const ext = mime === 'image/png' ? 'png' : 'jpg';
-        const dataUrl = canvas.toDataURL(mime, 0.95);
-
-        state.isExporting = false;
-        renderCanvas();
-
-        const link = document.createElement('a');
-        link.download = `Timemark_BPS_${state.photoCode}_${Date.now()}.${ext}`;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast(`Berhasil mengunduh foto resolusi penuh (.${ext.toUpperCase()})`, 'success');
-      });
-
-      // Drag & Drop File onto Viewport
-      const viewport = document.getElementById('canvasViewport');
-      viewport.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        viewport.classList.add('ring-2', 'ring-blue-500');
-      });
-      viewport.addEventListener('dragleave', () => {
-        viewport.classList.remove('ring-2', 'ring-blue-500');
-      });
-      viewport.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        viewport.classList.remove('ring-2', 'ring-blue-500');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-          state.baseImage = await loadImageFromURL(URL.createObjectURL(file));
-          state.ocrBoxes = [];
-          state.selectedOcrId = null;
-          renderOcrDetectedList();
-          renderCanvas();
-          showToast(`Foto "${file.name}" berhasil dimuat!`, 'success');
-        }
-      });
-    }
-
-    // ==========================================
-    // 12. BOOTSTRAP APPLICATION
-    // ==========================================
-    window.addEventListener('DOMContentLoaded', async () => {
-      lucide.createIcons();
-      bindUIEvents();
-
-      // Load Official BPS Logo & Staff Avatar
-      await loadOfficialBpsLogo();
-      state.avatarImage = await svgToImage(DEFAULT_AVATAR_SVG);
-      document.getElementById('previewAvatarThumb').src = state.avatarImage.src;
-
-      // Load Demo Base Photo
-      state.baseImage = await generateDemoSampleImage();
-
-      // Init Leaflet Satellite Map & Render Initial Canvas
-      initLeafletMap();
+      if (!state.draggingTarget) return;
+      state.positions[state.draggingTarget].x = Math.max(0, Math.min(0.95, (pt.x - state.dragOffset.x) / state.canvasWidth));
+      state.positions[state.draggingTarget].y = Math.max(0, Math.min(0.95, (pt.y - state.dragOffset.y) / state.canvasHeight));
       renderCanvas();
     });
+
+    window.addEventListener('mouseup', () => {
+      if (state.isDrawingManualBox && state.manualBoxStart && state.manualBoxCurrent) {
+        const rx = Math.min(state.manualBoxStart.x, state.manualBoxCurrent.x);
+        const ry = Math.min(state.manualBoxStart.y, state.manualBoxCurrent.y);
+        const rw = Math.abs(state.manualBoxCurrent.x - state.manualBoxStart.x);
+        const rh = Math.abs(state.manualBoxCurrent.y - state.manualBoxStart.y);
+
+        if (rw > 15 && rh > 10) {
+          const newBox = {
+            id: 'manual-' + Date.now(),
+            originalText: '[Area Seleksi Manual]',
+            text: 'Teks Pengganti',
+            x: rx, y: ry, w: rw, h: rh,
+            fontSize: Math.max(14, Math.round(rh * 0.72)),
+            color: '#ffffff',
+            weight: '500',
+            shadowStrength: 75,
+            offsetY: 0,
+            edited: true,
+            isManual: true
+          };
+          state.ocrBoxes.push(newBox);
+          selectOcrBox(newBox.id);
+          renderOcrList();
+        }
+        state.isDrawingManualBox = false;
+        state.manualBoxStart = null;
+        state.manualBoxCurrent = null;
+        canvas.style.cursor = 'pointer';
+        document.getElementById('canvasHint').textContent = 'Klik kotak teks pada foto untuk mengedit langsung dengan latar belakang tajam tanpa blur';
+        renderCanvas();
+      }
+      state.draggingTarget = null;
+    });
+
+    // =========================================================================
+    // MODE & LAYER CONTROLS
+    // =========================================================================
+    function syncLayerCheckboxes() {
+      document.getElementById('chkBadge').checked = state.layers.badge;
+      document.getElementById('chkMap').checked = state.layers.map;
+      document.getElementById('chkMainLogo').checked = state.layers.mainLogo;
+      document.getElementById('chkTextBlock').checked = state.layers.textBlock;
+      document.getElementById('chkFooter').checked = state.layers.footer;
+      document.getElementById('chkRightWatermark').checked = state.layers.rightWatermark;
+    }
+
+    document.getElementById('modeInplaceBtn').addEventListener('click', () => {
+      state.mode = 'inplace';
+      document.getElementById('modeInplaceBtn').className = 'py-1.5 px-2 rounded-md text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center justify-center gap-1';
+      document.getElementById('modeOverlayBtn').className = 'py-1.5 px-2 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-1';
+      document.getElementById('modeDescription').innerHTML = '<b>Edit OCR In-Place (1+2+4):</b> Menghapus piksel huruf saja (<i>glyph masking</i>) dan mengisi tekstur lokal tanpa nge-blur latar belakang foto asli.';
+      state.layers = { badge: false, map: false, mainLogo: false, textBlock: false, footer: false, rightWatermark: false };
+      syncLayerCheckboxes();
+      document.querySelector('[data-tab="tab-ocr"]').click();
+      renderCanvas();
+    });
+
+    document.getElementById('modeOverlayBtn').addEventListener('click', () => {
+      state.mode = 'overlay';
+      document.getElementById('modeOverlayBtn').className = 'py-1.5 px-2 rounded-md text-xs font-semibold bg-sky-600 text-white shadow transition flex items-center justify-center gap-1';
+      document.getElementById('modeInplaceBtn').className = 'py-1.5 px-2 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-1';
+      document.getElementById('modeDescription').innerHTML = '<b>Stempel Baru:</b> Menambahkan template Timemark & Logo BPS lengkap ke foto yang belum ber-watermark.';
+      state.layers = { badge: true, map: true, mainLogo: true, textBlock: true, footer: true, rightWatermark: true };
+      syncLayerCheckboxes();
+      document.querySelector('[data-tab="tab-text"]').click();
+      renderCanvas();
+    });
+
+    document.getElementById('btnPresetKeepOriginal').addEventListener('click', () => {
+      state.layers = { badge: false, map: false, mainLogo: false, textBlock: false, footer: false, rightWatermark: false };
+      syncLayerCheckboxes();
+      renderCanvas();
+    });
+
+    document.getElementById('btnPresetFullTemplate').addEventListener('click', () => {
+      state.layers = { badge: true, map: true, mainLogo: true, textBlock: true, footer: true, rightWatermark: true };
+      syncLayerCheckboxes();
+      renderCanvas();
+    });
+
+    [
+      ['chkBadge', 'badge'],
+      ['chkMap', 'map'],
+      ['chkMainLogo', 'mainLogo'],
+      ['chkTextBlock', 'textBlock'],
+      ['chkFooter', 'footer'],
+      ['chkRightWatermark', 'rightWatermark']
+    ].forEach(([elId, key]) => {
+      document.getElementById(elId).addEventListener('change', e => {
+        state.layers[key] = e.target.checked;
+        renderCanvas();
+      });
+    });
+
+    // Tabs Navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('tab-active');
+        document.getElementById(btn.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    // Form Inputs Live Update
+    ['inpRegionCode', 'inpTitle', 'inpDate', 'inpTime', 'inpTimezone', 'inpAddress', 'inpLat', 'inpLng', 'inpAltitude', 'inpPhotoCode', 'inpStaffName', 'inpStaffRole'].forEach(id => {
+      document.getElementById(id).addEventListener('input', renderCanvas);
+    });
+
+    document.getElementById('inpCompassDeg').addEventListener('input', e => {
+      const deg = parseInt(e.target.value) || 0;
+      document.getElementById('compassDirBadge').textContent = degToCompass(deg);
+      renderCanvas();
+    });
+
+    document.getElementById('inpMapZoom').addEventListener('input', e => {
+      document.getElementById('zoomVal').textContent = e.target.value;
+    });
+
+    document.getElementById('btnSyncMap').addEventListener('click', captureMapSnapshot);
+
+    document.getElementById('btnSearchAddress').addEventListener('click', async () => {
+      const query = document.getElementById('inpAddress').value.trim();
+      if (!query) return;
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          document.getElementById('inpLat').value = parseFloat(data[0].lat).toFixed(6);
+          document.getElementById('inpLng').value = parseFloat(data[0].lon).toFixed(6);
+          captureMapSnapshot();
+          renderCanvas();
+        } else {
+          alert('Alamat tidak ditemukan di Nominatim.');
+        }
+      } catch (e) {
+        alert('Gagal mencari alamat.');
+      }
+    });
+
+    document.getElementById('btnGenCode').addEventListener('click', () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = '';
+      for (let i = 0; i < 14; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+      document.getElementById('inpPhotoCode').value = code;
+      renderCanvas();
+    });
+
+    document.getElementById('inpOverlayScale').addEventListener('input', e => {
+      const val = parseInt(e.target.value);
+      state.overlayScale = val / 100;
+      document.getElementById('scaleVal').textContent = `${val}%`;
+      renderCanvas();
+    });
+
+    document.getElementById('btnResetPositions').addEventListener('click', () => {
+      state.positions = { badge: { x: 0.03, y: 0.025 }, map: { x: 0.03, y: 0.095 }, textBlock: { x: 0.03, y: 0.56 } };
+      state.overlayScale = 1.0;
+      document.getElementById('inpOverlayScale').value = 100;
+      document.getElementById('scaleVal').textContent = '100%';
+      renderCanvas();
+    });
+
+    document.getElementById('btnLoadOfficialBps').addEventListener('click', loadOfficialBpsLogo);
+
+    function handleImageUpload(file, callback) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => callback(img);
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById('photoInput').addEventListener('change', e => {
+      handleImageUpload(e.target.files[0], img => {
+        state.ocrBoxes = [];
+        state.selectedOcrId = null;
+        document.getElementById('activeOcrEditor').classList.add('hidden');
+        renderOcrList();
+        setBackgroundImage(img);
+      });
+    });
+
+    document.getElementById('logoInput').addEventListener('change', e => {
+      handleImageUpload(e.target.files[0], img => {
+        state.logoImage = img;
+        document.getElementById('logoPreviewThumb').src = img.src;
+        document.getElementById('logoSourceStatus').textContent = 'Logo Kustom';
+        renderCanvas();
+      });
+    });
+
+    document.getElementById('avatarInput').addEventListener('change', e => {
+      handleImageUpload(e.target.files[0], img => { state.avatarImage = img; renderCanvas(); });
+    });
+
+    document.getElementById('btnSamplePhoto').addEventListener('click', createSampleBackground);
+
+    // Drag & Drop File onto Viewport
+    const viewport = document.getElementById('canvasViewport');
+    const dropOverlay = document.getElementById('dropOverlay');
+    viewport.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.remove('hidden'); });
+    viewport.addEventListener('dragleave', () => dropOverlay.classList.add('hidden'));
+    viewport.addEventListener('drop', e => {
+      e.preventDefault();
+      dropOverlay.classList.add('hidden');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        handleImageUpload(file, img => {
+          state.ocrBoxes = [];
+          state.selectedOcrId = null;
+          document.getElementById('activeOcrEditor').classList.add('hidden');
+          renderOcrList();
+          setBackgroundImage(img);
+        });
+      }
+    });
+
+    // Zoom Controls
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      state.viewZoom = Math.min(200, (state.viewZoom || 60) + 15);
+      canvas.style.maxHeight = 'none';
+      canvas.style.maxWidth = 'none';
+      canvas.style.width = `${(state.canvasWidth * state.viewZoom) / 100}px`;
+      document.getElementById('viewZoomLabel').textContent = `${state.viewZoom}%`;
+    });
+
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      state.viewZoom = Math.max(20, (state.viewZoom || 60) - 15);
+      canvas.style.maxHeight = 'none';
+      canvas.style.maxWidth = 'none';
+      canvas.style.width = `${(state.canvasWidth * state.viewZoom) / 100}px`;
+      document.getElementById('viewZoomLabel').textContent = `${state.viewZoom}%`;
+    });
+
+    // Download Export (Clean without guide boxes)
+    document.getElementById('btnDownload').addEventListener('click', () => {
+      const prevMask = state.showGlyphMaskPreview;
+      state.showGlyphMaskPreview = false;
+      state._isExporting = true;
+      renderCanvas();
+
+      const format = document.getElementById('exportFormat').value;
+      const ext = format === 'image/png' ? 'png' : 'jpg';
+      const dataUrl = canvas.toDataURL(format, 0.96);
+
+      state._isExporting = false;
+      state.showGlyphMaskPreview = prevMask;
+      renderCanvas();
+
+      const link = document.createElement('a');
+      link.download = `Timemark_BPS_${document.getElementById('inpPhotoCode').value || 'Result'}.${ext}`;
+      link.href = dataUrl;
+      link.click();
+    });
+
+    // Boot
+    syncLayerCheckboxes();
+    loadOfficialBpsLogo();
+    createDefaultAvatar();
+    createSampleBackground();
+    initLeafletMap();
   </script>
 </body>
 </html>
