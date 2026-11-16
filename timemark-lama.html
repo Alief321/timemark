@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Timemark BPS Editor & Overlay Studio</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Roboto', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts: Inter & Roboto -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS & JS (Interactive Satellite Map) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Tesseract.js v5 (Browser OCR) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.8);
+    }
+    /* Checkerboard background for canvas preview area */
+    .canvas-bg {
+      background-color: #0f172a;
+      background-image: 
+        linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+    .leaflet-container {
+      font-family: 'Inter', sans-serif;
+      z-index: 10;
+    }
+    /* Custom range slider */
+    input[type=range] {
+      accent-color: #3b82f6;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top Navbar -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
+    <div class="flex items-center gap-3">
+      <!-- Mini BPS Emblem -->
+      <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center p-1.5 shadow-inner">
+        <svg viewBox="0 0 120 100" class="w-full h-full">
+          <path d="M22,20 L48,20 L42,42 L58,42 L52,65 L14,65 Z" fill="#0095DA"/>
+          <path d="M56,15 L84,15 L76,44 L94,44 L86,72 L46,72 Z" fill="#F7941D"/>
+          <path d="M35,52 L75,52 L68,85 L26,85 Z" fill="#8DC63F"/>
+          <ellipse cx="60" cy="52" rx="48" ry="26" fill="none" stroke="#ffffff" stroke-width="4" transform="rotate(-12 60 52)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">Timemark BPS Studio</h1>
+          <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Pro Overlay & OCR</span>
+        </div>
+        <p class="text-xs text-slate-400 hidden sm:block">Editor Watermark Geotagging, OCR Auto-Extract & Retouch Foto Lapangan</p>
+      </div>
+    </div>
+
+    <!-- Header Quick Actions -->
+    <div class="flex items-center gap-2 flex-wrap">
+      <button id="btnLoadSample" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer">
+        <i data-lucide="image" class="w-3.5 h-3.5 text-amber-400"></i>
+        <span>Muat Foto Contoh</span>
+      </button>
+
+      <label for="photoUploadInput" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-medium border border-blue-500/40 transition cursor-pointer">
+        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+        <span>Upload Foto</span>
+        <input id="photoUploadInput" type="file" accept="image/*" class="hidden" />
+      </label>
+
+      <div class="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700">
+        <select id="exportFormat" class="bg-transparent text-xs text-slate-300 px-2 py-1.5 outline-none cursor-pointer">
+          <option value="image/jpeg" class="bg-slate-900">JPG (95%)</option>
+          <option value="image/png" class="bg-slate-900">PNG (Lossless)</option>
+        </select>
+        <button id="btnDownload" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/50 transition cursor-pointer">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Unduh Hasil</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+    
+    <!-- LEFT SIDEBAR: Controls & Tabs -->
+    <aside class="w-full lg:w-[440px] xl:w-[480px] bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col h-auto lg:h-[calc(100vh-65px)]">
+      
+      <!-- Mode Selector Banner -->
+      <div class="p-3 bg-slate-950/60 border-b border-slate-800">
+        <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
+          <button id="modeBtnNew" data-mode="new" class="mode-tab active flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition bg-blue-600 text-white shadow">
+            <i data-lucide="stamp" class="w-3.5 h-3.5"></i>
+            <span>1. Stempel Foto Mentah</span>
+          </button>
+          <button id="modeBtnEdit" data-mode="edit" class="mode-tab flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">
+            <i data-lucide="scan-text" class="w-3.5 h-3.5"></i>
+            <span>2. Edit & OCR Foto Lama</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-800 bg-slate-900/50 px-2 pt-2 gap-1 overflow-x-auto">
+        <button data-tab="tabGeotag" class="ctrl-tab active flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-blue-500 text-blue-400 bg-slate-800/60 whitespace-nowrap">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+          <span>Geotag & Teks</span>
+        </button>
+        <button data-tab="tabMap" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <i data-lucide="satellite" class="w-3.5 h-3.5"></i>
+          <span>Mini-Map & Arah</span>
+        </button>
+        <button data-tab="tabProfile" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <i data-lucide="user-check" class="w-3.5 h-3.5"></i>
+          <span>Profil & Badge</span>
+        </button>
+        <button data-tab="tabRetouch" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+          <span>OCR & Hapus Lama</span>
+        </button>
+        <button data-tab="tabLayout" class="ctrl-tab flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <i data-lucide="move" class="w-3.5 h-3.5"></i>
+          <span>Posisi & Skala</span>
+        </button>
+      </div>
+
+      <!-- Tab Content Scrollable Area -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-5">
+
+        <!-- TAB 1: GEOTAG & TEKS -->
+        <div id="tabGeotag" class="tab-panel space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Informasi Kegiatan & Waktu</h2>
+            <button id="btnAutoFillNow" class="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer">
+              <i data-lucide="clock" class="w-3 h-3"></i> Waktu Sekarang
+            </button>
+          </div>
+
+          <div class="space-y-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Judul Kegiatan</label>
+              <input id="inpTitle" type="text" value="Perjadin BPS" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Pilih Tanggal & Jam</label>
+                <input id="inpDateTimePicker" type="datetime-local" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Zona Waktu</label>
+                <select id="inpTimezone" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none">
+                  <option value="GMT+8" selected>GMT+8 (WITA)</option>
+                  <option value="GMT+7">GMT+7 (WIB)</option>
+                  <option value="GMT+9">GMT+9 (WIT)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Teks Waktu Terformat (Editable)</label>
+              <input id="inpFormattedDate" type="text" value="Mon, 16 Nov 2026 08:07 GMT+8" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Lokasi & Koordinat GPS</h2>
+            <button id="btnReverseGeocode" class="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i> Ambil Alamat dari Lat/Lng
+            </button>
+          </div>
+
+          <div class="space-y-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Alamat Lengkap (Otomatis Wrap 2-3 Baris)</label>
+              <textarea id="inpAddress" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none resize-none">Jl. Soekarno - Hatta, Dasan Geres, Kec. Gerung, Kabupaten Lombok Barat, Nusa Tenggara Bar. 83363</textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Latitude (Desimal)</label>
+                <input id="inpLat" type="number" step="0.000001" value="-8.684020" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Longitude (Desimal)</label>
+                <input id="inpLng" type="number" step="0.000001" value="116.137824" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Teks Koordinat Tampil</label>
+              <input id="inpCoordText" type="text" value="8.684020°S, 116.137824°E" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-amber-300 focus:border-blue-500 outline-none" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Altitude (mdpl)</label>
+                <input id="inpAltitude" type="text" value="60.3 m" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Compass (Derajat & Arah)</label>
+                <input id="inpCompassText" type="text" value="138° SE" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-medium text-slate-300">Photo Code (Timemark Verified)</label>
+                <button id="btnGenCode" class="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer">
+                  <i data-lucide="shuffle" class="w-3 h-3"></i> Acak Kode
+                </button>
+              </div>
+              <input id="inpPhotoCode" type="text" value="U1NXW2KXLWXPBE" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono tracking-wider text-emerald-400 focus:border-blue-500 outline-none uppercase" />
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: MINI-MAP & ARAH -->
+        <div id="tabMap" class="tab-panel hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Mini-Map Satelit Interaktif</h2>
+            <span class="text-[11px] text-slate-400">Esri World Imagery</span>
+          </div>
+
+          <!-- Search Address Bar -->
+          <div class="flex gap-2">
+            <input id="inpMapSearch" type="text" placeholder="Cari desa/kecamatan (mis: Gerung Lombok Barat)..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none" />
+            <button id="btnMapSearch" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer">
+              Cari
+            </button>
+          </div>
+
+          <!-- Leaflet Interactive Map Container -->
+          <div class="relative rounded-2xl overflow-hidden border-2 border-slate-700 shadow-lg">
+            <div id="leafletMap" class="w-full h-56 bg-slate-800"></div>
+            <div class="bg-slate-900/90 px-3 py-1.5 text-[11px] text-slate-300 flex justify-between items-center border-t border-slate-800">
+              <span>Klik peta atau geser untuk pindah titik lokasi</span>
+              <button id="btnCaptureMap" class="text-blue-400 font-semibold hover:underline cursor-pointer">Sinkronkan ke Kanvas</button>
+            </div>
+          </div>
+
+          <!-- Compass Angle & Map Controls -->
+          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium text-slate-300">Arah Kerucut Kompas Hijau</span>
+                <span id="lblCompassDeg" class="font-mono text-emerald-400 font-bold">138° (SE)</span>
+              </div>
+              <input id="inpCompassAngle" type="range" min="0" max="359" value="138" class="w-full cursor-pointer" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium text-slate-300">Zoom Satelit Mini-Map</span>
+                <span id="lblMapZoom" class="font-mono text-blue-400">17</span>
+              </div>
+              <input id="inpMapZoom" type="range" min="13" max="19" value="17" class="w-full cursor-pointer" />
+            </div>
+
+            <div class="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
+              <label for="customMapUpload" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 cursor-pointer transition">
+                <i data-lucide="image-plus" class="w-3.5 h-3.5 text-blue-400"></i>
+                <span>Upload Gambar Peta Custom</span>
+                <input id="customMapUpload" type="file" accept="image/*" class="hidden" />
+              </label>
+              <button id="btnResetCustomMap" class="hidden px-3 py-2 rounded-xl bg-red-500/20 text-red-300 text-xs border border-red-500/30 cursor-pointer">
+                Reset Satelit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: PROFIL, BADGE & LOGO -->
+        <div id="tabProfile" class="tab-panel hidden space-y-4">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Badge Kode Wilayah (Pojok Kiri Atas)</h2>
+          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+            <div class="grid grid-cols-3 gap-2.5 items-end">
+              <div class="col-span-2">
+                <label class="block text-xs font-medium text-slate-300 mb-1">Kode Wilayah / Satker</label>
+                <input id="inpBadgeCode" type="text" value="5201" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Warna Badge</label>
+                <input id="inpBadgeColor" type="color" value="#e478dc" class="w-full h-10 bg-slate-950 border border-slate-700 rounded-xl p-1 cursor-pointer" />
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input id="chkShowBadge" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-blue-600" />
+              <span>Tampilkan Badge Kode Wilayah</span>
+            </label>
+          </div>
+
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Footer Petugas & Logo Instansi</h2>
+          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+            <div class="flex items-center gap-3">
+              <img id="previewAvatarThumb" src="" alt="Avatar" class="w-14 h-14 rounded-full object-cover border-2 border-blue-500 bg-slate-800" />
+              <div class="flex-1 space-y-1.5">
+                <label for="avatarUploadInput" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer transition">
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span>Ganti Foto Profil</span>
+                  <input id="avatarUploadInput" type="file" accept="image/*" class="hidden" />
+                </label>
+                <p class="text-[11px] text-slate-400">Otomatis dipotong bulat di footer putih</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Nama Petugas</label>
+                <input id="inpStaffName" type="text" value="Aliefta Zulvansyah B" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Jabatan / Peran</label>
+                <input id="inpStaffRole" type="text" value="Staff" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-700/60 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-slate-300">Logo Instansi (BPS 3-Warna)</span>
+                <div class="flex gap-1.5">
+                  <label for="logoUploadInput" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[11px] text-white cursor-pointer">
+                    Upload Logo PNG/SVG
+                    <input id="logoUploadInput" type="file" accept="image/*" class="hidden" />
+                  </label>
+                  <button id="btnResetLogo" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700 cursor-pointer">
+                    Default BPS
+                  </button>
+                </div>
+              </div>
+
+              <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input id="chkShowFooter" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-blue-600" />
+                <span>Tampilkan Footer Putih Bawah</span>
+              </label>
+              <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input id="chkShowSideVerified" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-blue-600" />
+                <span>Tampilkan Teks Vertikal "Timemark Verified" di Kanan</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: OCR & HAPUS WATERMARK LAMA -->
+        <div id="tabRetouch" class="tab-panel hidden space-y-4">
+          <!-- OCR Section -->
+          <div class="bg-gradient-to-br from-blue-950/60 to-slate-900 p-4 rounded-2xl border border-blue-500/30 space-y-3">
+            <div class="flex items-start gap-2.5">
+              <div class="p-2 rounded-xl bg-blue-500/20 text-blue-400">
+                <i data-lucide="scan-text" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-white">Ekstraksi Teks Otomatis (OCR)</h3>
+                <p class="text-xs text-slate-300 mt-0.5">Baca teks Timemark yang sudah menempel pada foto dan isi form editor secara otomatis.</p>
+              </div>
+            </div>
+
+            <button id="btnRunOCR" class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-950 transition cursor-pointer">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              <span>Scan OCR Otomatis dari Foto</span>
+            </button>
+
+            <!-- OCR Progress Bar -->
+            <div id="ocrProgressBox" class="hidden space-y-1.5">
+              <div class="flex justify-between text-[11px] text-blue-300">
+                <span id="ocrStatusText">Memuat engine Tesseract.js...</span>
+                <span id="ocrPercentText">0%</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="ocrProgressBar" class="bg-blue-500 h-full transition-all duration-200" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Raw OCR Output Preview -->
+            <div id="ocrRawContainer" class="hidden">
+              <label class="block text-[11px] font-medium text-slate-400 mb-1">Hasil Mentah Pembacaan OCR:</label>
+              <textarea id="ocrRawOutput" rows="4" readonly class="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-2 text-[11px] font-mono text-slate-300 outline-none"></textarea>
+            </div>
+          </div>
+
+          <!-- Retouch / Patch Old Watermark Section -->
+          <div class="bg-slate-800/40 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div class="flex items-start gap-2.5">
+              <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                <i data-lucide="eraser" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-white">Hapus / Tutup Watermark Lama</h3>
+                <p class="text-xs text-slate-400 mt-0.5">Gunakan kuas blur adaptif langsung di kanvas untuk menyamarkan teks/peta lama sebelum ditimpa.</p>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+              <span class="text-xs font-semibold text-slate-200">Mode Kuas Retouch di Kanvas</span>
+              <button id="btnToggleBrush" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-400 border border-amber-500/30 transition cursor-pointer">
+                Aktifkan Kuas
+              </button>
+            </div>
+
+            <div id="brushControls" class="space-y-3 pt-1">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-300">Ukuran Kuas</span>
+                  <span id="lblBrushSize" class="font-mono text-amber-400">36 px</span>
+                </div>
+                <input id="inpBrushSize" type="range" min="10" max="120" value="36" class="w-full cursor-pointer" />
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-300 mb-1">Metode Penyamaran</label>
+                <select id="inpPatchMode" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none">
+                  <option value="blur">Smart Pixel Blur & Smudge (Halus)</option>
+                  <option value="sample">Ambil Warna Sekitar (Auto-Tone Fill)</option>
+                </select>
+              </div>
+
+              <div class="flex gap-2">
+                <button id="btnUndoPatch" class="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer">
+                  <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Undo Goresan
+                </button>
+                <button id="btnClearPatches" class="flex-1 py-2 px-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-xs text-red-300 border border-red-500/30 flex items-center justify-center gap-1.5 cursor-pointer">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Reset Semua
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 5: POSISI & SKALA ELEMEN -->
+        <div id="tabLayout" class="tab-panel hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Tata Letak & Skala Overlay</h2>
+            <button id="btnResetLayout" class="text-[11px] text-blue-400 hover:underline cursor-pointer">Reset Default</button>
+          </div>
+
+          <p class="text-xs text-slate-400 bg-slate-800/50 p-2.5 rounded-xl border border-slate-800">
+            Tip: Anda juga bisa langsung <strong>klik & geser (drag)</strong> Badge, Kotak Mini-Map, atau Blok Teks Geotag langsung di atas kanvas kanan!
+          </p>
+
+          <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3.5">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">Skala Global Template</span>
+                <span id="lblGlobalScale" class="font-mono text-blue-400">100%</span>
+              </div>
+              <input id="inpGlobalScale" type="range" min="60" max="150" value="100" class="w-full cursor-pointer" />
+            </div>
+
+            <div class="border-t border-slate-700/60 pt-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300 font-semibold">Posisi Blok Teks Geotag (X / Y %)</span>
+                <span id="lblTextPos" class="font-mono text-slate-400">3% / 64%</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="inpTextX" type="range" min="0" max="75" value="3" class="w-full cursor-pointer" />
+                <input id="inpTextY" type="range" min="15" max="85" value="64" class="w-full cursor-pointer" />
+              </div>
+            </div>
+
+            <div class="border-t border-slate-700/60 pt-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300 font-semibold">Posisi Kotak Mini-Map (X / Y %)</span>
+                <span id="lblMapPos" class="font-mono text-slate-400">3% / 11%</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="inpMapX" type="range" min="0" max="80" value="3" class="w-full cursor-pointer" />
+                <input id="inpMapY" type="range" min="0" max="75" value="11" class="w-full cursor-pointer" />
+              </div>
+            </div>
+
+            <div class="border-t border-slate-700/60 pt-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300 font-semibold">Posisi Badge Wilayah (X / Y %)</span>
+                <span id="lblBadgePos" class="font-mono text-slate-400">3% / 2.5%</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="inpBadgeX" type="range" min="0" max="85" value="3" class="w-full cursor-pointer" />
+                <input id="inpBadgeY" type="range" min="0" max="85" value="2.5" class="w-full cursor-pointer" />
+              </div>
+            </div>
+
+            <div class="border-t border-slate-700/60 pt-3">
+              <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input id="chkLogoAboveText" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-blue-600" />
+                <span>Tampilkan Logo BPS di atas Judul Kegiatan</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- RIGHT WORKSPACE: Live High-Res Canvas Preview -->
+    <section class="flex-1 flex flex-col canvas-bg relative overflow-hidden min-h-[520px] lg:h-[calc(100vh-65px)]">
+      
+      <!-- Canvas Top Toolbar -->
+      <div class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2 z-20">
+        <div class="flex items-center gap-3 text-xs text-slate-300">
+          <span id="canvasResolutionBadge" class="px-2 py-0.5 rounded bg-slate-800 font-mono text-[11px] text-blue-400 border border-slate-700">1200 × 1600 px</span>
+          <span id="interactionHint" class="text-slate-400 hidden sm:inline">Seret elemen di kanvas untuk mengatur posisi</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnToggleCompare" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 flex items-center gap-1.5 cursor-pointer select-none">
+            <i data-lucide="eye" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span>Tahan: Lihat Foto Asli</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Canvas Viewport Container -->
+      <div id="canvasViewport" class="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-auto relative">
+        <div id="canvasWrapper" class="relative shadow-2xl shadow-black/80 rounded-lg overflow-hidden border border-slate-700/80 transition-transform">
+          <canvas id="mainCanvas" class="block max-w-full max-h-[76vh] w-auto h-auto cursor-grab"></canvas>
+        </div>
+      </div>
+
+      <!-- Hidden Offscreen Canvas for Map Tile Compositing -->
+      <canvas id="mapOffscreenCanvas" width="320" height="320" class="hidden"></canvas>
+    </section>
+
+  </main>
+
+  <script>
+    /**
+     * TIMEMARK BPS EDITOR & OVERLAY STUDIO
+     * Single-file Client-Side Web Application
+     */
+
+    // ==========================================
+    // 1. DEFAULT ASSETS (SVG LOGO BPS & AVATAR)
+    // ==========================================
+    const DEFAULT_BPS_LOGO_SVG = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 180" width="220" height="180">
+        <defs>
+          <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.35"/>
+          </filter>
+        </defs>
+        <g filter="url(#shadow)">
+          <!-- White Backing Ring for Contrast on Photos -->
+          <ellipse cx="112" cy="92" rx="92" ry="50" fill="none" stroke="#ffffff" stroke-width="11" transform="rotate(-14 112 92)"/>
+          <!-- Blue Element (Left) -->
+          <path d="M44,32 L88,32 L78,68 L104,68 L93,108 L26,108 Z" fill="#0095DA" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+          <!-- Orange Element (Right) -->
+          <path d="M104,22 L152,22 L139,68 L168,68 L154,116 L84,116 Z" fill="#F7941D" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+          <!-- Green Element (Bottom) -->
+          <path d="M64,86 L136,86 L124,144 L48,144 Z" fill="#8DC63F" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+          <!-- Inner Orbit Swoosh -->
+          <ellipse cx="112" cy="92" rx="92" ry="50" fill="none" stroke="#0095DA" stroke-width="4.5" transform="rotate(-14 112 92)"/>
+        </g>
+      </svg>
+    `;
+
+    const DEFAULT_AVATAR_SVG = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+        <rect width="200" height="200" fill="#dbeafe"/>
+        <circle cx="100" cy="76" r="38" fill="#1e3a8a"/>
+        <path d="M36,186 C36,142 164,142 164,186 Z" fill="#1e40af"/>
+        <path d="M82,135 L100,162 L118,135 Z" fill="#ffffff"/>
+        <path d="M95,142 L105,142 L103,172 L97,172 Z" fill="#dc2626"/>
+      </svg>
+    `;
+
+    // ==========================================
+    // 2. APPLICATION STATE
+    // ==========================================
+    const state = {
+      mode: 'new', // 'new' | 'edit'
+      baseImage: null, // HTMLImageElement
+      mapSnapshot: null, // HTMLCanvasElement or HTMLImageElement
+      customMapImage: null,
+      logoImage: null,
+      avatarImage: null,
+      showOriginalOnly: false,
+
+      // Geotag & Text Data
+      badgeCode: '5201',
+      badgeColor: '#e478dc',
+      showBadge: true,
+
+      title: 'Perjadin BPS',
+      formattedDate: 'Mon, 16 Nov 2026 08:07 GMT+8',
+      timezone: 'GMT+8',
+      address: 'Jl. Soekarno - Hatta, Dasan Geres, Kec. Gerung, Kabupaten Lombok Barat, Nusa Tenggara Bar. 83363',
+      lat: -8.684020,
+      lng: 116.137824,
+      coordText: '8.684020°S, 116.137824°E',
+      altitude: '60.3 m',
+      compassAngle: 138,
+      compassText: '138° SE',
+      photoCode: 'U1NXW2KXLWXPBE',
+
+      // Profile & Footer Data
+      staffName: 'Aliefta Zulvansyah B',
+      staffRole: 'Staff',
+      showFooter: true,
+      showSideVerified: true,
+      logoAboveText: true,
+
+      // Layout Positions (in percentage 0-100 of canvas width/height)
+      globalScale: 1.0,
+      badgePos: { x: 3.0, y: 2.5 },
+      mapPos: { x: 3.0, y: 10.5 },
+      textPos: { x: 3.0, y: 63.0 },
+
+      // Interactive Dragging State
+      draggingTarget: null, // 'badge' | 'map' | 'text' | null
+      dragOffset: { x: 0, y: 0 },
+      boundingBoxes: {
+        badge: null,
+        map: null,
+        text: null
+      },
+
+      // Retouch / Brush State
+      brushActive: false,
+      isPainting: false,
+      brushSize: 36,
+      patchMode: 'blur', // 'blur' | 'sample'
+      patches: [] // Array of strokes: [{ points: [{x,y}], size, mode }]
+    };
+
+    // ==========================================
+    // 3. DOM REFERENCES
+    // ==========================================
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const mapOffscreenCanvas = document.getElementById('mapOffscreenCanvas');
+    const mapOffCtx = mapOffscreenCanvas.getContext('2d');
+
+    // ==========================================
+    // 4. UTILITY FUNCTIONS
+    // ==========================================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        info: 'bg-slate-800 border-blue-500/50 text-slate-100',
+        success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-100',
+        warning: 'bg-amber-950/95 border-amber-500/60 text-amber-100',
+        error: 'bg-red-950/95 border-red-500/60 text-red-100'
+      };
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-xl text-xs font-medium flex items-center gap-2.5 transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+      toast.innerHTML = `<span>${message}</span>`;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function loadImageFromURL(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    function svgToImage(svgString) {
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      return loadImageFromURL(url);
+    }
+
+    function formatLatLngDisplay(lat, lng) {
+      const latDir = lat < 0 ? 'S' : 'N';
+      const lngDir = lng < 0 ? 'W' : 'E';
+      return `${Math.abs(lat).toFixed(6)}°${latDir}, ${Math.abs(lng).toFixed(6)}°${lngDir}`;
+    }
+
+    function degreesToCardinal(deg) {
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const idx = Math.round(((deg % 360) / 45)) % 8;
+      return dirs[idx];
+    }
+
+    function generateRandomCode(len = 14) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let res = '';
+      for (let i = 0; i < len; i++) {
+        res += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return res;
+    }
+
+    function formatTimemarkDate(dateObj, tz) {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const d = days[dateObj.getDay()];
+      const dayNum = String(dateObj.getDate()).padStart(2, '0');
+      const m = months[dateObj.getMonth()];
+      const y = dateObj.getFullYear();
+      const hh = String(dateObj.getHours()).padStart(2, '0');
+      const mm = String(dateObj.getMinutes()).padStart(2, '0');
+      return `${d}, ${dayNum} ${m} ${y} ${hh}:${mm} ${tz}`;
+    }
+
+    // ==========================================
+    // 5. LEAFLET INTERACTIVE SATELLITE MAP
+    // ==========================================
+    let leafletMap = null;
+    let mapMarker = null;
+
+    function initLeafletMap() {
+      leafletMap = L.map('leafletMap', {
+        center: [state.lat, state.lng],
+        zoom: 17,
+        zoomControl: false,
+        attributionControl: false
+      });
+
+      // Esri World Imagery (Satellite Tiles with CORS support)
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        crossOrigin: true,
+        maxZoom: 19
+      }).addTo(leafletMap);
+
+      // Custom Pin Marker
+      const pinIcon = L.divIcon({
+        className: 'custom-pin',
+        html: `<div style="width:18px;height:18px;background:#2563eb;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      mapMarker = L.marker([state.lat, state.lng], { icon: pinIcon }).addTo(leafletMap);
+
+      leafletMap.on('click', async (e) => {
+        const { lat, lng } = e.latlng;
+        updateLocationCoordinates(lat, lng, true);
+      });
+
+      leafletMap.on('moveend', () => {
+        renderSatelliteMiniMapToOffscreen();
+      });
+
+      // Initial capture
+      setTimeout(renderSatelliteMiniMapToOffscreen, 800);
+    }
+
+    // Renders Esri satellite tiles directly into offscreen canvas so export never hits tainted canvas issues
+    async function renderSatelliteMiniMapToOffscreen() {
+      if (state.customMapImage) {
+        renderCanvas();
+        return;
+      }
+
+      const size = 320;
+      mapOffscreenCanvas.width = size;
+      mapOffscreenCanvas.height = size;
+      const zoom = parseInt(document.getElementById('inpMapZoom').value, 10) || 17;
+
+      // Convert lat/lng to Web Mercator tile coordinates
+      const latRad = state.lat * Math.PI / 180;
+      const n = Math.pow(2, zoom);
+      const xTileFloat = (state.lng + 180) / 360 * n;
+      const yTileFloat = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+
+      const centerTileX = Math.floor(xTileFloat);
+      const centerTileY = Math.floor(yTileFloat);
+      const offsetX = (xTileFloat - centerTileX) * 256;
+      const offsetY = (yTileFloat - centerTileY) * 256;
+
+      // Draw dark satellite fallback grid first
+      mapOffCtx.fillStyle = '#1e293b';
+      mapOffCtx.fillRect(0, 0, size, size);
+
+      const tilePromises = [];
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const tx = centerTileX + dx;
+          const ty = centerTileY + dy;
+          const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+          const drawX = (size / 2) - offsetX + (dx * 256);
+          const drawY = (size / 2) - offsetY + (dy * 256);
+
+          tilePromises.push(
+            loadImageFromURL(url)
+              .then(img => {
+                mapOffCtx.drawImage(img, drawX, drawY, 256, 256);
+              })
+              .catch(() => {})
+          );
+        }
+      }
+
+      await Promise.all(tilePromises);
+
+      // Draw Compass Green Sector Cone + Blue Location Pin in Center
+      const cx = size / 2;
+      const cy = size / 2;
+      const rad = (state.compassAngle - 90) * Math.PI / 180;
+      const spread = 32 * Math.PI / 180;
+
+      mapOffCtx.save();
+      const grad = mapOffCtx.createRadialGradient(cx, cy, 4, cx, cy, 95);
+      grad.addColorStop(0, 'rgba(34, 197, 94, 0.85)');
+      grad.addColorStop(1, 'rgba(34, 197, 94, 0.05)');
+      mapOffCtx.fillStyle = grad;
+      mapOffCtx.beginPath();
+      mapOffCtx.moveTo(cx, cy);
+      mapOffCtx.arc(cx, cy, 95, rad - spread, rad + spread);
+      mapOffCtx.closePath();
+      mapOffCtx.fill();
+      mapOffCtx.restore();
+
+      // Draw Blue Map Pin
+      mapOffCtx.save();
+      mapOffCtx.shadowColor = 'rgba(0,0,0,0.55)';
+      mapOffCtx.shadowBlur = 8;
+      mapOffCtx.beginPath();
+      mapOffCtx.arc(cx, cy - 10, 13, Math.PI * 0.8, Math.PI * 2.2);
+      mapOffCtx.lineTo(cx, cy + 8);
+      mapOffCtx.closePath();
+      mapOffCtx.fillStyle = '#2563eb';
+      mapOffCtx.fill();
+      mapOffCtx.lineWidth = 2.5;
+      mapOffCtx.strokeStyle = '#ffffff';
+      mapOffCtx.stroke();
+
+      mapOffCtx.beginPath();
+      mapOffCtx.arc(cx, cy - 10, 4.5, 0, Math.PI * 2);
+      mapOffCtx.fillStyle = '#ffffff';
+      mapOffCtx.fill();
+      mapOffCtx.restore();
+
+      // Subtle "Google / Satelit" watermark label at bottom-left of mini-map
+      mapOffCtx.save();
+      mapOffCtx.font = 'bold 20px Inter, sans-serif';
+      mapOffCtx.fillStyle = 'rgba(255,255,255,0.9)';
+      mapOffCtx.shadowColor = 'rgba(0,0,0,0.8)';
+      mapOffCtx.shadowBlur = 4;
+      mapOffCtx.fillText('Google', 12, size - 12);
+      mapOffCtx.restore();
+
+      state.mapSnapshot = mapOffscreenCanvas;
+      renderCanvas();
+    }
+
+    async function updateLocationCoordinates(lat, lng, fetchAddress = false) {
+      state.lat = parseFloat(lat.toFixed(6));
+      state.lng = parseFloat(lng.toFixed(6));
+      state.coordText = formatLatLngDisplay(state.lat, state.lng);
+
+      document.getElementById('inpLat').value = state.lat;
+      document.getElementById('inpLng').value = state.lng;
+      document.getElementById('inpCoordText').value = state.coordText;
+
+      if (leafletMap && mapMarker) {
+        leafletMap.setView([state.lat, state.lng], leafletMap.getZoom());
+        mapMarker.setLatLng([state.lat, state.lng]);
+      }
+
+      renderSatelliteMiniMapToOffscreen();
+
+      if (fetchAddress) {
+        try {
+          const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${state.lat}&lon=${state.lng}&accept-language=id`);
+          const data = await resp.json();
+          if (data && data.display_name) {
+            state.address = data.display_name;
+            document.getElementById('inpAddress').value = state.address;
+            renderCanvas();
+            showToast('Alamat diperbarui dari koordinat peta', 'success');
+          }
+        } catch (err) {
+          console.warn('Reverse geocode failed:', err);
+        }
+      }
+    }
+
+    // ==========================================
+    // 6. SAMPLE PHOTO GENERATOR (DEMO MODE)
+    // ==========================================
+    function generateDemoSampleImage() {
+      const w = 1200;
+      const h = 1600;
+      const off = document.createElement('canvas');
+      off.width = w;
+      off.height = h;
+      const octx = off.getContext('2d');
+
+      // Realistic warm indoor/veranda field survey gradient scene
+      const bgGrad = octx.createLinearGradient(0, 0, w, h);
+      bgGrad.addColorStop(0, '#475569');
+      bgGrad.addColorStop(0.45, '#64748b');
+      bgGrad.addColorStop(1, '#334155');
+      octx.fillStyle = bgGrad;
+      octx.fillRect(0, 0, w, h);
+
+      // Architectural wooden beam & wall accents
+      octx.fillStyle = '#78350f';
+      octx.fillRect(0, 0, w, 140);
+      octx.fillStyle = '#fef3c7';
+      octx.fillRect(360, 140, 840, 1100);
+
+      // Decorative green vertical wall accent (like sample 3)
+      octx.fillStyle = '#15803d';
+      octx.fillRect(620, 140, 580, 920);
+
+      // Silhouette of field surveyor taking selfie
+      octx.fillStyle = '#d6d3d1';
+      octx.beginPath();
+      octx.ellipse(540, 1380, 420, 360, 0, Math.PI, Math.PI * 2);
+      octx.fill();
+
+      octx.fillStyle = '#fed7aa';
+      octx.beginPath();
+      octx.ellipse(520, 740, 175, 220, 0, 0, Math.PI * 2);
+      octx.fill();
+
+      octx.fillStyle = '#1e293b';
+      octx.beginPath();
+      octx.ellipse(520, 580, 180, 110, 0, Math.PI, Math.PI * 2);
+      octx.fill();
+
+      // Subtle instructional watermark on raw sample
+      octx.fillStyle = 'rgba(255,255,255,0.22)';
+      octx.font = '600 28px Inter, sans-serif';
+      octx.textAlign = 'center';
+      octx.fillText('FOTO CONTOH DOKUMENTASI LAPANGAN BPS', w / 2, 340);
+
+      return loadImageFromURL(off.toDataURL('image/jpeg', 0.92));
+    }
+
+    // ==========================================
+    // 7. MAIN CANVAS RENDERING ENGINE
+    // ==========================================
+    function wrapTextLines(context, text, maxWidth) {
+      const words = text.split(/\s+/);
+      const lines = [];
+      let currentLine = '';
+
+      for (let i = 0; i < words.length; i++) {
+        const testLine = currentLine ? `${currentLine} ${words[i]}` : words[i];
+        const metrics = context.measureText(testLine);
+        if (metrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = words[i];
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+      return lines;
+    }
+
+    function drawRoundedRect(context, x, y, width, height, radius) {
+      context.beginPath();
+      context.moveTo(x + radius, y);
+      context.lineTo(x + width - radius, y);
+      context.quadraticCurveTo(x + width, y, x + width, y + radius);
+      context.lineTo(x + width, y + height - radius);
+      context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      context.lineTo(x + radius, y + height);
+      context.quadraticCurveTo(x, y + height, x, y + height - radius);
+      context.lineTo(x, y + radius);
+      context.quadraticCurveTo(x, y, x + radius, y);
+      context.closePath();
+    }
+
+    function applyRetouchPatches(targetCtx, W, H) {
+      if (!state.patches.length) return;
+
+      for (const stroke of state.patches) {
+        if (!stroke.points.length) continue;
+        const radius = (stroke.size / 1000) * Math.max(W, H);
+
+        for (const pt of stroke.points) {
+          const px = pt.x * W;
+          const py = pt.y * H;
+
+          targetCtx.save();
+          targetCtx.beginPath();
+          targetCtx.arc(px, py, radius, 0, Math.PI * 2);
+          targetCtx.clip();
+
+          if (stroke.mode === 'sample') {
+            // Sample color slightly above the brush point to cover text cleanly
+            const sampleY = Math.max(0, Math.min(H - 1, Math.round(py - radius * 1.4)));
+            const sampleX = Math.max(0, Math.min(W - 1, Math.round(px)));
+            const pixel = targetCtx.getImageData(sampleX, sampleY, 1, 1).data;
+            targetCtx.fillStyle = `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, 0.92)`;
+            targetCtx.fillRect(px - radius, py - radius, radius * 2, radius * 2);
+          } else {
+            // Heavy multi-pass blur smudge
+            targetCtx.filter = `blur(${Math.max(8, Math.round(radius * 0.45))}px)`;
+            targetCtx.drawImage(canvas, 0, 0);
+          }
+          targetCtx.restore();
+        }
+      }
+    }
+
+    function renderCanvas() {
+      if (!state.baseImage) return;
+
+      const W = state.baseImage.naturalWidth || state.baseImage.width;
+      const H = state.baseImage.naturalHeight || state.baseImage.height;
+
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+        document.getElementById('canvasResolutionBadge').textContent = `${W} × ${H} px`;
+      }
+
+      ctx.clearRect(0, 0, W, H);
+
+      // 1. Draw Base Photo
+      ctx.drawImage(state.baseImage, 0, 0, W, H);
+
+      // If user holds "Lihat Foto Asli", stop here
+      if (state.showOriginalOnly) return;
+
+      // 2. Apply Retouch / Watermark Eraser Patches (if any)
+      applyRetouchPatches(ctx, W, H);
+
+      // Calculate responsive unit scale based on shorter dimension so portrait & landscape both look authentic
+      const baseUnit = Math.min(W, H) / 1000;
+      const u = baseUnit * state.globalScale;
+
+      // Subtle bottom gradient scrim for white text legibility
+      const footerH = state.showFooter ? Math.round(118 * baseUnit) : 0;
+      const scrimGrad = ctx.createLinearGradient(0, H - footerH - 420 * u, 0, H - footerH);
+      scrimGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      scrimGrad.addColorStop(1, 'rgba(0,0,0,0.48)');
+      ctx.fillStyle = scrimGrad;
+      ctx.fillRect(0, H - footerH - 420 * u, W, 420 * u);
+
+      // ==========================================
+      // 3. DRAW BADGE KODE WILAYAH (e.g., "5201")
+      // ==========================================
+      if (state.showBadge && state.badgeCode.trim()) {
+        const bx = (state.badgePos.x / 100) * W;
+        const by = (state.badgePos.y / 100) * H;
+        const badgeFont = Math.round(32 * u);
+        ctx.font = `700 ${badgeFont}px Inter, Roboto, sans-serif`;
+        const textMetrics = ctx.measureText(state.badgeCode);
+        const padX = 24 * u;
+        const bw = textMetrics.width + padX * 2;
+        const bh = 58 * u;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.28)';
+        ctx.shadowBlur = 10 * u;
+        ctx.shadowOffsetY = 3 * u;
+        drawRoundedRect(ctx, bx, by, bw, bh, 12 * u);
+        ctx.fillStyle = state.badgeColor;
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillText(state.badgeCode, bx + bw / 2, by + bh / 2 + 1 * u);
+        ctx.restore();
+
+        state.boundingBoxes.badge = { x: bx, y: by, w: bw, h: bh };
+      } else {
+        state.boundingBoxes.badge = null;
+      }
+
+      // ==========================================
+      // 4. DRAW MINI-MAP SATELLITE BOX
+      // ==========================================
+      const mx = (state.mapPos.x / 100) * W;
+      const my = (state.mapPos.y / 100) * H;
+      const mapSize = 235 * u;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 14 * u;
+      ctx.shadowOffsetY = 4 * u;
+
+      // White border frame
+      drawRoundedRect(ctx, mx - 4 * u, my - 4 * u, mapSize + 8 * u, mapSize + 8 * u, 14 * u);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // Clip inside map box
+      drawRoundedRect(ctx, mx, my, mapSize, mapSize, 10 * u);
+      ctx.clip();
+
+      const activeMapImg = state.customMapImage || state.mapSnapshot;
+      if (activeMapImg) {
+        ctx.drawImage(activeMapImg, mx, my, mapSize, mapSize);
+      } else {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(mx, my, mapSize, mapSize);
+      }
+      ctx.restore();
+
+      state.boundingBoxes.map = { x: mx, y: my, w: mapSize, h: mapSize };
+
+      // ==========================================
+      // 5. DRAW LOGO + GEOTAG TEXT BLOCK
+      // ==========================================
+      const tx = (state.textPos.x / 100) * W;
+      let cursorY = (state.textPos.y / 100) * H;
+      const blockStartY = cursorY;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.75)';
+      ctx.shadowBlur = 6 * u;
+      ctx.shadowOffsetX = 1 * u;
+      ctx.shadowOffsetY = 1.5 * u;
+
+      // Optional BPS Logo above Title
+      if (state.logoAboveText && state.logoImage) {
+        const logoW = 145 * u;
+        const logoH = 115 * u;
+        ctx.drawImage(state.logoImage, tx - 6 * u, cursorY - logoH - 8 * u, logoW, logoH);
+      }
+
+      // Title ("Perjadin BPS")
+      const titleFontSize = Math.round(36 * u);
+      ctx.font = `700 ${titleFontSize}px Inter, Roboto, sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(state.title, tx, cursorY);
+
+      cursorY += titleFontSize + 16 * u;
+      const accentBarTop = cursorY;
+
+      // Indented lines beside yellow vertical bar
+      const indentX = tx + 22 * u;
+      const detailFontSize = Math.round(25 * u);
+      const lineGap = 11 * u;
+      ctx.font = `500 ${detailFontSize}px Inter, Roboto, sans-serif`;
+
+      // Line 1: Date & Time
+      ctx.fillText(state.formattedDate, indentX, cursorY);
+      cursorY += detailFontSize + lineGap;
+
+      // Line 2+: Address (Wrapped nicely)
+      const maxAddressWidth = Math.min(W * 0.64, 660 * u);
+      const addrLines = wrapTextLines(ctx, state.address, maxAddressWidth);
+      for (const line of addrLines) {
+        ctx.fillText(line, indentX, cursorY);
+        cursorY += detailFontSize + 6 * u;
+      }
+      cursorY += 5 * u;
+
+      // Line 3: Coordinates
+      ctx.fillText(state.coordText, indentX, cursorY);
+      cursorY += detailFontSize + lineGap;
+
+      // Line 4: Altitude
+      ctx.fillText(`Altitude ${state.altitude}`, indentX, cursorY);
+      cursorY += detailFontSize + lineGap;
+
+      // Line 5: Compass
+      ctx.fillText(`Compass ${state.compassText}`, indentX, cursorY);
+      const accentBarBottom = cursorY + detailFontSize;
+
+      // Yellow Vertical Accent Line
+      ctx.fillStyle = '#facc15';
+      drawRoundedRect(ctx, tx + 2 * u, accentBarTop, 5.5 * u, accentBarBottom - accentBarTop, 3 * u);
+      ctx.fill();
+
+      cursorY = accentBarBottom + 16 * u;
+
+      // Verified Shield Icon + Photo Code
+      const shieldSize = 22 * u;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2.2 * u;
+      ctx.beginPath();
+      ctx.moveTo(tx + shieldSize / 2, cursorY);
+      ctx.lineTo(tx + shieldSize, cursorY + shieldSize * 0.25);
+      ctx.lineTo(tx + shieldSize, cursorY + shieldSize * 0.65);
+      ctx.quadraticCurveTo(tx + shieldSize / 2, cursorY + shieldSize, tx + shieldSize / 2, cursorY + shieldSize);
+      ctx.quadraticCurveTo(tx, cursorY + shieldSize * 0.65, tx, cursorY + shieldSize * 0.65);
+      ctx.lineTo(tx, cursorY + shieldSize * 0.25);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Checkmark inside shield
+      ctx.beginPath();
+      ctx.moveTo(tx + shieldSize * 0.28, cursorY + shieldSize * 0.52);
+      ctx.lineTo(tx + shieldSize * 0.45, cursorY + shieldSize * 0.68);
+      ctx.lineTo(tx + shieldSize * 0.74, cursorY + shieldSize * 0.35);
+      ctx.stroke();
+
+      const codeFontSize = Math.round(21 * u);
+      ctx.font = `500 ${codeFontSize}px Inter, Roboto, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.fillText(`Photo Code: `, tx + shieldSize + 10 * u, cursorY + 1 * u);
+      const labelW = ctx.measureText('Photo Code: ').width;
+      ctx.font = `700 ${codeFontSize}px Inter, Roboto, sans-serif`;
+      ctx.fillText(state.photoCode, tx + shieldSize + 10 * u + labelW, cursorY + 1 * u);
+
+      ctx.restore();
+
+      state.boundingBoxes.text = {
+        x: tx,
+        y: blockStartY - (state.logoAboveText ? 110 * u : 0),
+        w: maxAddressWidth + 40 * u,
+        h: (cursorY + 30 * u) - (blockStartY - (state.logoAboveText ? 110 * u : 0))
+      };
+
+      // ==========================================
+      // 6. DRAW VERTICAL SIDE "Timemark Verified"
+      // ==========================================
+      if (state.showSideVerified) {
+        ctx.save();
+        const sideX = W - 22 * baseUnit;
+        const sideY = H * 0.52;
+        ctx.translate(sideX, sideY);
+        ctx.rotate(-Math.PI / 2);
+
+        ctx.font = `600 ${Math.round(17 * baseUnit)}px Inter, sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 4 * baseUnit;
+        ctx.textAlign = 'left';
+        ctx.fillText(`✔ ${state.photoCode}  Timemark Verified`, 0, 0);
+        ctx.restore();
+      }
+
+      // ==========================================
+      // 7. DRAW BOTTOM WHITE FOOTER BAR
+      // ==========================================
+      if (state.showFooter) {
+        const fy = H - footerH;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, fy, W, footerH);
+
+        // Diagonal subtle divider line on right side (matching sample)
+        const diagX1 = W - 210 * baseUnit;
+        const diagX2 = W - 255 * baseUnit;
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2 * baseUnit;
+        ctx.beginPath();
+        ctx.moveTo(diagX1, fy);
+        ctx.lineTo(diagX2, H);
+        ctx.stroke();
+
+        // Circular Staff Avatar
+        const avRadius = 38 * baseUnit;
+        const avCenterX = 64 * baseUnit;
+        const avCenterY = fy + footerH / 2;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        if (state.avatarImage) {
+          ctx.drawImage(state.avatarImage, avCenterX - avRadius, avCenterY - avRadius, avRadius * 2, avRadius * 2);
+        }
+        ctx.restore();
+
+        // Avatar subtle border
+        ctx.beginPath();
+        ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2 * baseUnit;
+        ctx.stroke();
+
+        // Staff Name & Role
+        const textStartX = avCenterX + avRadius + 22 * baseUnit;
+        ctx.fillStyle = '#0f172a';
+        ctx.font = `700 ${Math.round(28 * baseUnit)}px Inter, Roboto, sans-serif`;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(state.staffName, textStartX, avCenterY - 2 * baseUnit);
+
+        ctx.fillStyle = '#475569';
+        ctx.font = `500 ${Math.round(22 * baseUnit)}px Inter, Roboto, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(state.staffRole, textStartX, avCenterY + 5 * baseUnit);
+
+        // Right Footer BPS Logo
+        if (state.logoImage) {
+          const fLogoW = 110 * baseUnit;
+          const fLogoH = 88 * baseUnit;
+          const fLogoX = W - 155 * baseUnit;
+          const fLogoY = fy + (footerH - fLogoH) / 2;
+          ctx.drawImage(state.logoImage, fLogoX, fLogoY, fLogoW, fLogoH);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    // ==========================================
+    // 8. CANVAS POINTER INTERACTIONS (DRAG & BRUSH)
+    // ==========================================
+    function getCanvasCoords(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    function isInsideBox(pt, box) {
+      if (!box) return false;
+      return pt.x >= box.x && pt.x <= box.x + box.w && pt.y >= box.y && pt.y <= box.y + box.h;
+    }
+
+    function handlePointerDown(evt) {
+      if (!state.baseImage) return;
+      const pt = getCanvasCoords(evt);
+
+      // Mode A: Retouch / Eraser Brush
+      if (state.brushActive) {
+        evt.preventDefault();
+        state.isPainting = true;
+        state.patches.push({
+          size: state.brushSize,
+          mode: state.patchMode,
+          points: [{ x: pt.x / canvas.width, y: pt.y / canvas.height }]
+        });
+        renderCanvas();
+        return;
+      }
+
+      // Mode B: Dragging Overlay Blocks
+      if (isInsideBox(pt, state.boundingBoxes.badge)) {
+        state.draggingTarget = 'badge';
+        state.dragOffset = {
+          x: pt.x - (state.badgePos.x / 100) * canvas.width,
+          y: pt.y - (state.badgePos.y / 100) * canvas.height
+        };
+      } else if (isInsideBox(pt, state.boundingBoxes.map)) {
+        state.draggingTarget = 'map';
+        state.dragOffset = {
+          x: pt.x - (state.mapPos.x / 100) * canvas.width,
+          y: pt.y - (state.mapPos.y / 100) * canvas.height
+        };
+      } else if (isInsideBox(pt, state.boundingBoxes.text)) {
+        state.draggingTarget = 'text';
+        state.dragOffset = {
+          x: pt.x - (state.textPos.x / 100) * canvas.width,
+          y: pt.y - (state.textPos.y / 100) * canvas.height
+        };
+      }
+
+      if (state.draggingTarget) {
+        evt.preventDefault();
+        canvas.style.cursor = 'grabbing';
+      }
+    }
+
+    function handlePointerMove(evt) {
+      if (!state.baseImage) return;
+      const pt = getCanvasCoords(evt);
+
+      if (state.brushActive && state.isPainting) {
+        evt.preventDefault();
+        const currentStroke = state.patches[state.patches.length - 1];
+        currentStroke.points.push({ x: pt.x / canvas.width, y: pt.y / canvas.height });
+        renderCanvas();
+        return;
+      }
+
+      if (state.draggingTarget) {
+        evt.preventDefault();
+        const newX = Math.max(0, Math.min(85, ((pt.x - state.dragOffset.x) / canvas.width) * 100));
+        const newY = Math.max(0, Math.min(88, ((pt.y - state.dragOffset.y) / canvas.height) * 100));
+
+        if (state.draggingTarget === 'badge') {
+          state.badgePos = { x: newX, y: newY };
+          document.getElementById('inpBadgeX').value = newX.toFixed(1);
+          document.getElementById('inpBadgeY').value = newY.toFixed(1);
+          document.getElementById('lblBadgePos').textContent = `${newX.toFixed(0)}% / ${newY.toFixed(0)}%`;
+        } else if (state.draggingTarget === 'map') {
+          state.mapPos = { x: newX, y: newY };
+          document.getElementById('inpMapX').value = newX.toFixed(1);
+          document.getElementById('inpMapY').value = newY.toFixed(1);
+          document.getElementById('lblMapPos').textContent = `${newX.toFixed(0)}% / ${newY.toFixed(0)}%`;
+        } else if (state.draggingTarget === 'text') {
+          state.textPos = { x: newX, y: newY };
+          document.getElementById('inpTextX').value = newX.toFixed(1);
+          document.getElementById('inpTextY').value = newY.toFixed(1);
+          document.getElementById('lblTextPos').textContent = `${newX.toFixed(0)}% / ${newY.toFixed(0)}%`;
+        }
+
+        renderCanvas();
+      } else if (!state.brushActive) {
+        // Hover cursor feedback
+        const hovering = isInsideBox(pt, state.boundingBoxes.badge) ||
+                         isInsideBox(pt, state.boundingBoxes.map) ||
+                         isInsideBox(pt, state.boundingBoxes.text);
+        canvas.style.cursor = hovering ? 'grab' : 'default';
+      }
+    }
+
+    function handlePointerUp() {
+      state.isPainting = false;
+      state.draggingTarget = null;
+      canvas.style.cursor = state.brushActive ? 'crosshair' : 'default';
+    }
+
+    canvas.addEventListener('mousedown', handlePointerDown);
+    canvas.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+
+    // ==========================================
+    // 9. TESSERACT.JS OCR ENGINE & SMART PARSER
+    // ==========================================
+    async function runAutoOCR() {
+      if (!state.baseImage) {
+        showToast('Silakan upload foto terlebih dahulu!', 'warning');
+        return;
+      }
+
+      const progressBox = document.getElementById('ocrProgressBox');
+      const statusText = document.getElementById('ocrStatusText');
+      const percentText = document.getElementById('ocrPercentText');
+      const progressBar = document.getElementById('ocrProgressBar');
+      const rawContainer = document.getElementById('ocrRawContainer');
+      const rawOutput = document.getElementById('ocrRawOutput');
+
+      progressBox.classList.remove('hidden');
+      statusText.textContent = 'Menyiapkan foto asli untuk OCR...';
+      progressBar.style.width = '10%';
+
+      try {
+        // Draw clean original image to temporary canvas for accurate OCR
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = state.baseImage.naturalWidth || state.baseImage.width;
+        tempCanvas.height = state.baseImage.naturalHeight || state.baseImage.height;
+        const tctx = tempCanvas.getContext('2d');
+        tctx.drawImage(state.baseImage, 0, 0);
+
+        const worker = await Tesseract.createWorker('eng+ind', 1, {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              const pct = Math.round(m.progress * 100);
+              statusText.textContent = 'Membaca teks Timemark...';
+              percentText.textContent = `${pct}%`;
+              progressBar.style.width = `${pct}%`;
+            }
+          }
+        });
+
+        const { data: { text } } = await worker.recognize(tempCanvas);
+        await worker.terminate();
+
+        rawContainer.classList.remove('hidden');
+        rawOutput.value = text;
+        parseOCRTextToFields(text);
+
+        statusText.textContent = 'OCR Selesai & Form Diperbarui!';
+        percentText.textContent = '100%';
+        progressBar.style.width = '100%';
+        showToast('Teks berhasil diekstrak dari foto ke form editor!', 'success');
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = 'Gagal memproses OCR.';
+        showToast('Terjadi kesalahan saat membaca OCR: ' + err.message, 'error');
+      }
+    }
+
+    function parseOCRTextToFields(rawText) {
+      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+      // 1. Extract Badge Code (4 digits like 5201 at top)
+      const badgeMatch = rawText.match(/\b(\d{4})\b/);
+      if (badgeMatch) {
+        state.badgeCode = badgeMatch[1];
+        document.getElementById('inpBadgeCode').value = state.badgeCode;
+      }
+
+      // 2. Extract Title (e.g., Perjadin BPS)
+      const titleLine = lines.find(l => /perjadin|bps|survei|pencacahan|pengawasan/i.test(l));
+      if (titleLine) {
+        state.title = titleLine.replace(/^[^a-zA-Z0-9]+/, '');
+        document.getElementById('inpTitle').value = state.title;
+      }
+
+      // 3. Extract Date & Time (e.g., Mon, 16 Nov 2026 08:07 GMT+8)
+      const dateRegex = /([A-Za-z]{3},\s*\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{1,2}:\d{2}\s*GMT[+-]\d+)/i;
+      const dateMatch = rawText.match(dateRegex);
+      if (dateMatch) {
+        state.formattedDate = dateMatch[1];
+        document.getElementById('inpFormattedDate').value = state.formattedDate;
+      }
+
+      // 4. Extract Coordinates (e.g., 8.684020°S, 116.137824°E)
+      const coordRegex = /(\d+\.\d+)\s*[°º]?\s*([NS])\s*[,;]\s*(\d+\.\d+)\s*[°º]?\s*([EW])/i;
+      const coordMatch = rawText.match(coordRegex);
+      if (coordMatch) {
+        let lat = parseFloat(coordMatch[1]);
+        if (coordMatch[2].toUpperCase() === 'S') lat = -lat;
+        let lng = parseFloat(coordMatch[3]);
+        if (coordMatch[4].toUpperCase() === 'W') lng = -lng;
+
+        state.lat = lat;
+        state.lng = lng;
+        state.coordText = formatLatLngDisplay(lat, lng);
+        document.getElementById('inpLat').value = lat;
+        document.getElementById('inpLng').value = lng;
+        document.getElementById('inpCoordText').value = state.coordText;
+        updateLocationCoordinates(lat, lng, false);
+      }
+
+      // 5. Extract Altitude (e.g., Altitude 60.3 m)
+      const altMatch = rawText.match(/Altitude\s*[:\-]?\s*([\d.]+\s*m)/i);
+      if (altMatch) {
+        state.altitude = altMatch[1];
+        document.getElementById('inpAltitude').value = state.altitude;
+      }
+
+      // 6. Extract Compass (e.g., Compass 138° SE)
+      const compMatch = rawText.match(/Compass\s*[:\-]?\s*(\d+)\s*[°º]?\s*([NSEW]{1,2})/i);
+      if (compMatch) {
+        const deg = parseInt(compMatch[1], 10);
+        const dir = compMatch[2].toUpperCase();
+        state.compassAngle = deg;
+        state.compassText = `${deg}° ${dir}`;
+        document.getElementById('inpCompassAngle').value = deg;
+        document.getElementById('inpCompassText').value = state.compassText;
+        document.getElementById('lblCompassDeg').textContent = `${deg}° (${dir})`;
+        renderSatelliteMiniMapToOffscreen();
+      }
+
+      // 7. Extract Photo Code (12-16 alphanumeric uppercase)
+      const codeMatch = rawText.match(/Photo\s*Code\s*[:\-]?\s*([A-Z0-9]{10,16})/i);
+      if (codeMatch) {
+        state.photoCode = codeMatch[1].toUpperCase();
+        document.getElementById('inpPhotoCode').value = state.photoCode;
+      }
+
+      // 8. Extract Address lines between Date and Coordinates
+      const dateIdx = lines.findIndex(l => dateRegex.test(l));
+      const coordIdx = lines.findIndex(l => coordRegex.test(l));
+      if (dateIdx !== -1 && coordIdx !== -1 && coordIdx > dateIdx + 1) {
+        const addrCandidate = lines.slice(dateIdx + 1, coordIdx).join(' ');
+        if (addrCandidate.length > 8) {
+          state.address = addrCandidate;
+          document.getElementById('inpAddress').value = state.address;
+        }
+      }
+
+      // 9. Extract Staff Role & Name near bottom
+      const staffIdx = lines.findIndex(l => /^staff$/i.test(l));
+      if (staffIdx > 0) {
+        state.staffRole = 'Staff';
+        state.staffName = lines[staffIdx - 1];
+        document.getElementById('inpStaffName').value = state.staffName;
+        document.getElementById('inpStaffRole').value = state.staffRole;
+      }
+
+      renderCanvas();
+    }
+
+    // ==========================================
+    // 10. EVENT LISTENERS & UI BINDINGS
+    // ==========================================
+    function bindUIEvents() {
+      // Tab Navigation
+      document.querySelectorAll('.ctrl-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.ctrl-tab').forEach(b => {
+            b.classList.remove('active', 'border-blue-500', 'text-blue-400', 'bg-slate-800/60');
+            b.classList.add('border-transparent', 'text-slate-400');
+          });
+          btn.classList.add('active', 'border-blue-500', 'text-blue-400', 'bg-slate-800/60');
+          btn.classList.remove('border-transparent', 'text-slate-400');
+
+          const targetId = btn.getAttribute('data-tab');
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+          document.getElementById(targetId).classList.remove('hidden');
+
+          if (targetId === 'tabMap' && leafletMap) {
+            setTimeout(() => leafletMap.invalidateSize(), 150);
+          }
+        });
+      });
+
+      // Mode Switcher (Mode 1 vs Mode 2)
+      document.querySelectorAll('.mode-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.mode-tab').forEach(b => {
+            b.classList.remove('bg-blue-600', 'text-white', 'shadow');
+            b.classList.add('text-slate-400');
+          });
+          btn.classList.add('bg-blue-600', 'text-white', 'shadow');
+          btn.classList.remove('text-slate-400');
+
+          state.mode = btn.getAttribute('data-mode');
+          if (state.mode === 'edit') {
+            // Switch directly to OCR & Eraser tab
+            document.querySelector('[data-tab="tabRetouch"]').click();
+            showToast('Mode Edit Foto Ber-Template aktif: Scan OCR atau hapus teks lama dengan kuas.', 'info');
+          } else {
+            document.querySelector('[data-tab="tabGeotag"]').click();
+          }
+        });
+      });
+
+      // Photo Upload
+      document.getElementById('photoUploadInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        state.baseImage = await loadImageFromURL(url);
+        state.patches = [];
+        renderCanvas();
+        showToast(`Foto "${file.name}" dimuat (${state.baseImage.naturalWidth}×${state.baseImage.naturalHeight})`, 'success');
+      });
+
+      // Load Demo Sample Photo
+      document.getElementById('btnLoadSample').addEventListener('click', async () => {
+        state.baseImage = await generateDemoSampleImage();
+        state.patches = [];
+        renderCanvas();
+        showToast('Foto contoh lapangan berhasil dimuat!', 'success');
+      });
+
+      // Geotag Text Inputs
+      document.getElementById('inpTitle').addEventListener('input', (e) => {
+        state.title = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('inpFormattedDate').addEventListener('input', (e) => {
+        state.formattedDate = e.target.value;
+        renderCanvas();
+      });
+
+      const updateDateFromPicker = () => {
+        const val = document.getElementById('inpDateTimePicker').value;
+        const tz = document.getElementById('inpTimezone').value;
+        state.timezone = tz;
+        if (val) {
+          const d = new Date(val);
+          state.formattedDate = formatTimemarkDate(d, tz);
+          document.getElementById('inpFormattedDate').value = state.formattedDate;
+          renderCanvas();
+        }
+      };
+      document.getElementById('inpDateTimePicker').addEventListener('change', updateDateFromPicker);
+      document.getElementById('inpTimezone').addEventListener('change', updateDateFromPicker);
+
+      document.getElementById('btnAutoFillNow').addEventListener('click', () => {
+        const now = new Date();
+        const tz = document.getElementById('inpTimezone').value;
+        state.formattedDate = formatTimemarkDate(now, tz);
+        document.getElementById('inpFormattedDate').value = state.formattedDate;
+        renderCanvas();
+      });
+
+      document.getElementById('inpAddress').addEventListener('input', (e) => {
+        state.address = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('inpLat').addEventListener('change', (e) => {
+        const lat = parseFloat(e.target.value);
+        if (!isNaN(lat)) updateLocationCoordinates(lat, state.lng, false);
+      });
+
+      document.getElementById('inpLng').addEventListener('change', (e) => {
+        const lng = parseFloat(e.target.value);
+        if (!isNaN(lng)) updateLocationCoordinates(state.lat, lng, false);
+      });
+
+      document.getElementById('inpCoordText').addEventListener('input', (e) => {
+        state.coordText = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('btnReverseGeocode').addEventListener('click', () => {
+        updateLocationCoordinates(state.lat, state.lng, true);
+      });
+
+      document.getElementById('inpAltitude').addEventListener('input', (e) => {
+        state.altitude = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('inpCompassText').addEventListener('input', (e) => {
+        state.compassText = e.target.value;
+        const numMatch = e.target.value.match(/(\d+)/);
+        if (numMatch) {
+          state.compassAngle = parseInt(numMatch[1], 10) % 360;
+          document.getElementById('inpCompassAngle').value = state.compassAngle;
+          renderSatelliteMiniMapToOffscreen();
+        }
+        renderCanvas();
+      });
+
+      document.getElementById('inpPhotoCode').addEventListener('input', (e) => {
+        state.photoCode = e.target.value.toUpperCase();
+        renderCanvas();
+      });
+
+      document.getElementById('btnGenCode').addEventListener('click', () => {
+        state.photoCode = generateRandomCode(14);
+        document.getElementById('inpPhotoCode').value = state.photoCode;
+        renderCanvas();
+      });
+
+      // Map Search & Sliders
+      document.getElementById('btnMapSearch').addEventListener('click', async () => {
+        const q = document.getElementById('inpMapSearch').value.trim();
+        if (!q) return;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+          const list = await res.json();
+          if (list && list.length > 0) {
+            const lat = parseFloat(list[0].lat);
+            const lng = parseFloat(list[0].lon);
+            updateLocationCoordinates(lat, lng, true);
+          } else {
+            showToast('Lokasi tidak ditemukan.', 'warning');
+          }
+        } catch (err) {
+          showToast('Gagal mencari lokasi.', 'error');
+        }
+      });
+
+      document.getElementById('inpCompassAngle').addEventListener('input', (e) => {
+        const deg = parseInt(e.target.value, 10);
+        const dir = degreesToCardinal(deg);
+        state.compassAngle = deg;
+        state.compassText = `${deg}° ${dir}`;
+        document.getElementById('lblCompassDeg').textContent = `${deg}° (${dir})`;
+        document.getElementById('inpCompassText').value = state.compassText;
+        renderSatelliteMiniMapToOffscreen();
+      });
+
+      document.getElementById('inpMapZoom').addEventListener('input', (e) => {
+        const z = parseInt(e.target.value, 10);
+        document.getElementById('lblMapZoom').textContent = z;
+        if (leafletMap) leafletMap.setZoom(z);
+        renderSatelliteMiniMapToOffscreen();
+      });
+
+      document.getElementById('btnCaptureMap').addEventListener('click', () => {
+        renderSatelliteMiniMapToOffscreen();
+        showToast('Tampilan satelit diperbarui ke kanvas!', 'success');
+      });
+
+      document.getElementById('customMapUpload').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        state.customMapImage = await loadImageFromURL(URL.createObjectURL(file));
+        document.getElementById('btnResetCustomMap').classList.remove('hidden');
+        renderCanvas();
+        showToast('Gambar mini-map custom diterapkan!', 'success');
+      });
+
+      document.getElementById('btnResetCustomMap').addEventListener('click', () => {
+        state.customMapImage = null;
+        document.getElementById('btnResetCustomMap').classList.add('hidden');
+        renderSatelliteMiniMapToOffscreen();
+      });
+
+      // Badge, Profile & Logo Inputs
+      document.getElementById('inpBadgeCode').addEventListener('input', (e) => {
+        state.badgeCode = e.target.value;
+        renderCanvas();
+      });
+      document.getElementById('inpBadgeColor').addEventListener('input', (e) => {
+        state.badgeColor = e.target.value;
+        renderCanvas();
+      });
+      document.getElementById('chkShowBadge').addEventListener('change', (e) => {
+        state.showBadge = e.target.checked;
+        renderCanvas();
+      });
+
+      document.getElementById('avatarUploadInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        state.avatarImage = await loadImageFromURL(url);
+        document.getElementById('previewAvatarThumb').src = url;
+        renderCanvas();
+      });
+
+      document.getElementById('inpStaffName').addEventListener('input', (e) => {
+        state.staffName = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('inpStaffRole').addEventListener('input', (e) => {
+        state.staffRole = e.target.value;
+        renderCanvas();
+      });
+
+      document.getElementById('logoUploadInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        state.logoImage = await loadImageFromURL(URL.createObjectURL(file));
+        renderCanvas();
+        showToast('Logo instansi berhasil diperbarui!', 'success');
+      });
+
+      document.getElementById('btnResetLogo').addEventListener('click', async () => {
+        state.logoImage = await svgToImage(DEFAULT_BPS_LOGO_SVG);
+        renderCanvas();
+      });
+
+      document.getElementById('chkShowFooter').addEventListener('change', (e) => {
+        state.showFooter = e.target.checked;
+        renderCanvas();
+      });
+
+      document.getElementById('chkShowSideVerified').addEventListener('change', (e) => {
+        state.showSideVerified = e.target.checked;
+        renderCanvas();
+      });
+
+      // OCR & Retouch Controls
+      document.getElementById('btnRunOCR').addEventListener('click', runAutoOCR);
+
+      document.getElementById('btnToggleBrush').addEventListener('click', (e) => {
+        state.brushActive = !state.brushActive;
+        const btn = e.currentTarget;
+        if (state.brushActive) {
+          btn.textContent = 'Kuas Aktif (Klik Selesai)';
+          btn.classList.add('bg-amber-500', 'text-slate-950');
+          btn.classList.remove('bg-slate-800', 'text-amber-400');
+          canvas.style.cursor = 'crosshair';
+          showToast('Usapkan kuas di atas tulisan/peta lama pada kanvas untuk menyamarkannya.', 'info');
+        } else {
+          btn.textContent = 'Aktifkan Kuas';
+          btn.classList.remove('bg-amber-500', 'text-slate-950');
+          btn.classList.add('bg-slate-800', 'text-amber-400');
+          canvas.style.cursor = 'default';
+        }
+      });
+
+      document.getElementById('inpBrushSize').addEventListener('input', (e) => {
+        state.brushSize = parseInt(e.target.value, 10);
+        document.getElementById('lblBrushSize').textContent = `${state.brushSize} px`;
+      });
+
+      document.getElementById('inpPatchMode').addEventListener('change', (e) => {
+        state.patchMode = e.target.value;
+      });
+
+      document.getElementById('btnUndoPatch').addEventListener('click', () => {
+        state.patches.pop();
+        renderCanvas();
+      });
+
+      document.getElementById('btnClearPatches').addEventListener('click', () => {
+        state.patches = [];
+        renderCanvas();
+      });
+
+      // Layout & Scale Controls
+      document.getElementById('inpGlobalScale').addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.globalScale = val / 100;
+        document.getElementById('lblGlobalScale').textContent = `${val}%`;
+        renderCanvas();
+      });
+
+      const bindPosSliders = (xId, yId, lblId, targetObj) => {
+        const update = () => {
+          targetObj.x = parseFloat(document.getElementById(xId).value);
+          targetObj.y = parseFloat(document.getElementById(yId).value);
+          document.getElementById(lblId).textContent = `${targetObj.x.toFixed(0)}% / ${targetObj.y.toFixed(0)}%`;
+          renderCanvas();
+        };
+        document.getElementById(xId).addEventListener('input', update);
+        document.getElementById(yId).addEventListener('input', update);
+      };
+
+      bindPosSliders('inpTextX', 'inpTextY', 'lblTextPos', state.textPos);
+      bindPosSliders('inpMapX', 'inpMapY', 'lblMapPos', state.mapPos);
+      bindPosSliders('inpBadgeX', 'inpBadgeY', 'lblBadgePos', state.badgePos);
+
+      document.getElementById('chkLogoAboveText').addEventListener('change', (e) => {
+        state.logoAboveText = e.target.checked;
+        renderCanvas();
+      });
+
+      document.getElementById('btnResetLayout').addEventListener('click', () => {
+        state.globalScale = 1.0;
+        state.badgePos = { x: 3.0, y: 2.5 };
+        state.mapPos = { x: 3.0, y: 10.5 };
+        state.textPos = { x: 3.0, y: 63.0 };
+        document.getElementById('inpGlobalScale').value = 100;
+        document.getElementById('lblGlobalScale').textContent = '100%';
+        document.getElementById('inpTextX').value = 3;
+        document.getElementById('inpTextY').value = 63;
+        document.getElementById('inpMapX').value = 3;
+        document.getElementById('inpMapY').value = 10.5;
+        document.getElementById('inpBadgeX').value = 3;
+        document.getElementById('inpBadgeY').value = 2.5;
+        renderCanvas();
+      });
+
+      // Compare Original Hold Button
+      const btnCompare = document.getElementById('btnToggleCompare');
+      const startCompare = () => { state.showOriginalOnly = true; renderCanvas(); };
+      const endCompare = () => { state.showOriginalOnly = false; renderCanvas(); };
+      btnCompare.addEventListener('mousedown', startCompare);
+      btnCompare.addEventListener('mouseup', endCompare);
+      btnCompare.addEventListener('mouseleave', endCompare);
+      btnCompare.addEventListener('touchstart', startCompare);
+      btnCompare.addEventListener('touchend', endCompare);
+
+      // Export / Download Full Resolution Image
+      document.getElementById('btnDownload').addEventListener('click', () => {
+        if (!state.baseImage) return;
+        const mime = document.getElementById('exportFormat').value;
+        const ext = mime === 'image/png' ? 'png' : 'jpg';
+        const dataUrl = canvas.toDataURL(mime, 0.95);
+        const link = document.createElement('a');
+        link.download = `Timemark_BPS_${state.photoCode}_${Date.now()}.${ext}`;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast(`Berhasil mengunduh foto resolusi penuh (.${ext.toUpperCase()})`, 'success');
+      });
+
+      // Drag & Drop File onto Viewport
+      const viewport = document.getElementById('canvasViewport');
+      viewport.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        viewport.classList.add('ring-2', 'ring-blue-500');
+      });
+      viewport.addEventListener('dragleave', () => {
+        viewport.classList.remove('ring-2', 'ring-blue-500');
+      });
+      viewport.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        viewport.classList.remove('ring-2', 'ring-blue-500');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          state.baseImage = await loadImageFromURL(URL.createObjectURL(file));
+          state.patches = [];
+          renderCanvas();
+          showToast(`Foto "${file.name}" berhasil dimuat!`, 'success');
+        }
+      });
+    }
+
+    // ==========================================
+    // 11. BOOTSTRAP APPLICATION
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      bindUIEvents();
+
+      // Load Default BPS Logo & Staff Avatar
+      state.logoImage = await svgToImage(DEFAULT_BPS_LOGO_SVG);
+      state.avatarImage = await svgToImage(DEFAULT_AVATAR_SVG);
+      document.getElementById('previewAvatarThumb').src = state.avatarImage.src;
+
+      // Load Demo Base Photo
+      state.baseImage = await generateDemoSampleImage();
+
+      // Init Leaflet Satellite Map & Render Initial Canvas
+      initLeafletMap();
+      renderCanvas();
+    });
+  </script>
+</body>
+</html>
